@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
 
-// Public routes that do not require authentication
+// Rotas públicas — não exigem autenticação
 const publicRoutes = [
   "/",
   "/login",
@@ -23,13 +23,17 @@ function isPublicRoute(pathname: string): boolean {
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
-  // Allow public routes
+  // Permitir rotas públicas
   if (isPublicRoute(pathname)) {
     return NextResponse.next()
   }
 
-  // Check for auth cookie (simulated)
-  const authToken = request.cookies.get("babylos-auth-token")
+  // Verificar token JWT no cookie (salvo no login via client-side)
+  // O cookie "monettra_auth_token" é definido pelo use-auth-store após login bem-sucedido
+  const authToken =
+    request.cookies.get("monettra_auth_token") ||
+    // Fallback: cookie legado (simulado) para não quebrar sessões existentes
+    request.cookies.get("babylos-auth-token")
 
   if (!authToken) {
     const loginUrl = new URL("/login", request.url)

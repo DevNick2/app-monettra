@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { Landmark, FileText, Tags, User, LogOut, Menu, X } from "lucide-react"
+import { Landmark, FileText, Tags, User, LogOut, Menu, X, BarChart2, ScrollText } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useState } from "react"
 import { logoutAction } from "@/app/actions/auth"
@@ -10,6 +10,8 @@ import { logoutAction } from "@/app/actions/auth"
 const navItems = [
   { href: "/app", label: "Inicio", icon: Landmark },
   { href: "/app/lancamentos", label: "Lancamentos", icon: FileText },
+  { href: "/app/planejamento", label: "Planejamento", icon: ScrollText },
+  { href: "/app/analytics", label: "Graficos", icon: BarChart2 },
   { href: "/app/categorias", label: "Categorias", icon: Tags },
   { href: "/app/perfil", label: "Perfil", icon: User },
 ]

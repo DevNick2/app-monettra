@@ -4,35 +4,36 @@ import { useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Eye, EyeOff, Landmark } from "lucide-react"
+import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
-import { loginAction } from "@/app/actions/auth"
+import { useAuthStore } from "@/stores/use-auth-store"
 
 export default function LoginPage() {
   const router = useRouter()
+  const { login, isLoading, error, clearError } = useAuthStore()
+
   const [showPassword, setShowPassword] = useState(false)
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
-  const [isLoading, setIsLoading] = useState(false)
 
-  function handleLogin(e: React.FormEvent) {
+  async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
-    setIsLoading(true)
-    loginAction().then(() => {
-      setIsLoading(false)
-      router.push("/app")
-    })
-  }
+    clearError()
 
-  function handleGoogleLogin() {
-    setIsLoading(true)
-    loginAction().then(() => {
-      setIsLoading(false)
+    try {
+      await login(email, password)
+      toast.success("Login realizado com sucesso!")
       router.push("/app")
-    })
+    } catch (err: unknown) {
+      // O erro foi propagado pela store com a mensagem amigável extraída do backend
+      const message =
+        err instanceof Error ? err.message : "Credenciais inválidas. Verifique seu e-mail e senha."
+      toast.error(message)
+    }
   }
 
   return (
@@ -42,25 +43,26 @@ export default function LoginPage() {
           <div className="flex items-center gap-2">
             <Landmark className="h-8 w-8 text-primary" />
             <h1 className="font-heading text-2xl font-bold tracking-wide text-foreground">
-              Babylos Finance
+              Monettra
             </h1>
           </div>
-          <p className="text-sm text-muted-foreground">
-            Sabedoria financeira da antiga Babilonia
-          </p>
+          <p className="text-sm text-muted-foreground">Sabedoria financeira da antiga Babilônia</p>
         </div>
 
         <Card className="border-border bg-card shadow-sm">
           <CardHeader className="pb-4">
             <CardTitle className="font-heading text-xl">Entrar</CardTitle>
-            <CardDescription>
-              Acesse sua conta para gerenciar suas financas
-            </CardDescription>
+            <CardDescription>Acesse sua conta para gerenciar suas finanças</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleLogin} className="flex flex-col gap-4">
               <div className="flex flex-col gap-2">
-                <Label htmlFor="email">E-mail</Label>
+                <Label
+                  htmlFor="email"
+                  className="text-xs font-semibold uppercase tracking-wider text-muted-foreground"
+                >
+                  E-mail
+                </Label>
                 <Input
                   id="email"
                   type="email"
@@ -68,16 +70,19 @@ export default function LoginPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
+                  disabled={isLoading}
                 />
               </div>
 
               <div className="flex flex-col gap-2">
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="password">Senha</Label>
-                  <Link
-                    href="/recuperar-conta"
-                    className="text-xs text-primary hover:underline"
+                  <Label
+                    htmlFor="password"
+                    className="text-xs font-semibold uppercase tracking-wider text-muted-foreground"
                   >
+                    Senha
+                  </Label>
+                  <Link href="/recuperar-conta" className="text-xs text-primary hover:underline">
                     Esqueceu a senha?
                   </Link>
                 </div>
@@ -89,11 +94,12 @@ export default function LoginPage() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required
+                    disabled={isLoading}
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer text-muted-foreground transition-colors hover:text-foreground"
                     aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
                   >
                     {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -101,7 +107,18 @@ export default function LoginPage() {
                 </div>
               </div>
 
-              <Button type="submit" className="w-full" disabled={isLoading}>
+              {/* Erro inline (além do toast) */}
+              {error && (
+                <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                  {error}
+                </p>
+              )}
+
+              <Button
+                type="submit"
+                className="w-full transition-all hover:scale-[1.02]"
+                disabled={isLoading}
+              >
                 {isLoading ? "Entrando..." : "Entrar"}
               </Button>
             </form>
@@ -114,9 +131,9 @@ export default function LoginPage() {
 
             <Button
               variant="outline"
-              className="w-full gap-2"
-              onClick={handleGoogleLogin}
+              className="w-full cursor-pointer gap-2 transition-all hover:scale-[1.02]"
               disabled={isLoading}
+              onClick={() => toast.info("Login com Google em breve!")}
             >
               <svg className="h-4 w-4" viewBox="0 0 24 24">
                 <path
@@ -140,9 +157,9 @@ export default function LoginPage() {
             </Button>
 
             <p className="mt-6 text-center text-sm text-muted-foreground">
-              {"Nao tem uma conta? "}
+              {"Não tem uma conta? "}
               <Link href="/" className="text-primary hover:underline">
-                Conheca nossos planos
+                Conheça nossos planos
               </Link>
             </p>
           </CardContent>
