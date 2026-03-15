@@ -25,6 +25,7 @@ export interface Category {
   color: string
   icon_name: string
   created_at: string
+  type: string
 }
 
 export interface User {
@@ -78,12 +79,14 @@ export interface CreateCategoryPayload {
   title: string
   color: string
   icon_name: string
+  type: TransactionType
 }
 
 export interface UpdateCategoryPayload {
   title?: string
   color?: string
   icon_name?: string
+  type?: TransactionType
 }
 
 export interface PlanningEntry {

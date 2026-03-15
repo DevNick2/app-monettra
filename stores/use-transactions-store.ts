@@ -13,7 +13,9 @@ import type {
 
 interface TransactionsState {
   transactions: Transaction[]
+  planningTransactions: Transaction[]
   isLoading: boolean
+  isLoadingPlanning: boolean
   error: string | null
   activeMonth: number | null
   activeYear: number | null
@@ -21,6 +23,7 @@ interface TransactionsState {
 
 interface TransactionsActions {
   fetchTransactions: (month?: number, year?: number) => Promise<void>
+  fetchPlanningTransactions: (year: number) => Promise<void>
   createTransaction: (data: CreateTransactionPayload) => Promise<void>
   payTransaction: (code: string) => Promise<void>
   updateTransaction: (code: string, data: UpdateTransactionPayload) => Promise<void>
@@ -32,7 +35,9 @@ type TransactionsStore = TransactionsState & TransactionsActions
 
 export const useTransactionsStore = create<TransactionsStore>((set, get) => ({
   transactions: [],
+  planningTransactions: [],
   isLoading: false,
+  isLoadingPlanning: false,
   error: null,
   activeMonth: null,
   activeYear: null,
@@ -55,6 +60,26 @@ export const useTransactionsStore = create<TransactionsStore>((set, get) => ({
           ? String((err as { message: string }).message)
           : "Erro ao carregar lançamentos"
       set({ isLoading: false, error: message })
+    }
+  },
+
+  // ── Fetch Planning ─────────────────────────────────────────
+  fetchPlanningTransactions: async (year: number) => {
+    const startDate = `${year}-01-01`
+    const endDate = `${year}-12-31`
+    
+    set({ isLoadingPlanning: true, error: null })
+    try {
+      const { data } = await api.get<Transaction[]>("/planning", {
+        params: { start_date: startDate, end_date: endDate }
+      })
+      set({ planningTransactions: data, isLoadingPlanning: false })
+    } catch (err: unknown) {
+      const message =
+        err && typeof err === "object" && "message" in err
+          ? String((err as { message: string }).message)
+          : "Erro ao carregar planejamento"
+      set({ isLoadingPlanning: false, error: message })
     }
   },
 

@@ -10,18 +10,8 @@ import {
   Pencil,
   Trash2,
   Home,
-  ShoppingCart,
-  Car,
-  Heart,
-  Gamepad2,
-  Briefcase,
-  GraduationCap,
-  Utensils,
-  Zap,
-  Wifi,
-  Droplets,
-  Phone,
 } from "lucide-react"
+import * as iconOptions from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -72,35 +62,26 @@ const months = [
   "Dezembro",
 ]
 
-const iconOptions = [
-  { name: "Home", icon: Home },
-  { name: "ShoppingCart", icon: ShoppingCart },
-  { name: "Car", icon: Car },
-  { name: "Heart", icon: Heart },
-  { name: "Gamepad2", icon: Gamepad2 },
-  { name: "Briefcase", icon: Briefcase },
-  { name: "GraduationCap", icon: GraduationCap },
-  { name: "Utensils", icon: Utensils },
-  { name: "Zap", icon: Zap },
-  { name: "Wifi", icon: Wifi },
-  { name: "Droplets", icon: Droplets },
-  { name: "Phone", icon: Phone },
-]
-
 function getIconComponent(iconName: string) {
-  const found = iconOptions.find((i) => i.name === iconName)
-  return found ? found.icon : Home
+  const Icon = (iconOptions as any)[iconName]
+  return Icon || Home
 }
 
 export default function LancamentosPage() {
   const [currentMonth, setCurrentMonth] = useState(new Date().getMonth())
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear())
 
+  const [viewMode, setViewMode] = useState<"month" | "year">("month")
+  const [planningYear, setPlanningYear] = useState<number>(new Date().getFullYear())
+
   // ─── Stores ────────────────────────────────────────────────
   const {
     transactions,
+    planningTransactions,
     isLoading,
+    isLoadingPlanning,
     fetchTransactions,
+    fetchPlanningTransactions,
     createTransaction,
     payTransaction,
     updateTransaction,
@@ -127,6 +108,44 @@ export default function LancamentosPage() {
   useEffect(() => {
     fetchTransactions(currentMonth + 1, currentYear)
   }, [fetchTransactions, currentMonth, currentYear])
+
+  useEffect(() => {
+    if (viewMode === "year") {
+      fetchPlanningTransactions(planningYear)
+    }
+  }, [fetchPlanningTransactions, viewMode, planningYear])
+
+  const yearlyData = useMemo(() => {
+    if (!planningTransactions) return []
+
+    const map = new Map<string, { category: any; months: number[] }>()
+
+    planningTransactions.forEach((t) => {
+      const catKey = t.category?.code || t.category?.title || "sem-categoria"
+      if (!map.has(catKey)) {
+        map.set(catKey, {
+          category: t.category ?? { title: "Sem Categoria", color: "var(--muted-foreground)" },
+          months: Array(12).fill(0),
+        })
+      }
+
+      const valStr = String(t.amount || "0")
+      const clean = valStr.replace(/\./g, "").replace(",", ".")
+      const val = parseFloat(clean) || 0
+
+      let monthIndex = 0
+      if (t.due_date?.includes("/")) {
+        monthIndex = parseInt(t.due_date.split("/")[1], 10) - 1
+      } else if (t.due_date?.includes("-")) {
+        monthIndex = parseInt(t.due_date.split("-")[1], 10) - 1
+      }
+
+      const item = map.get(catKey)!
+      item.months[monthIndex] += val
+    })
+
+    return Array.from(map.values())
+  }, [planningTransactions])
 
   // ─── Helpers de navegação de mês ───────────────────────────
   function prevMonth() {
@@ -276,7 +295,26 @@ export default function LancamentosPage() {
     <div className="flex flex-col gap-6">
       {/* ── Header ──────────────────────────────────────── */}
       <div className="flex items-center justify-between">
-        <h1 className="font-heading text-2xl font-bold text-foreground">Lançamentos</h1>
+        <div className="flex items-center gap-4">
+          <h1 className="font-heading text-2xl font-bold text-foreground">Lançamentos</h1>
+
+          <div className="flex bg-secondary/50 rounded-lg p-1">
+            <Button
+              variant="ghost"
+              className={cn("h-8 px-3 text-sm cursor-pointer transition-colors", viewMode === "month" ? "bg-background shadow-sm" : "hover:bg-background/50")}
+              onClick={() => setViewMode("month")}
+            >
+              Visão Mensal
+            </Button>
+            <Button
+              variant="ghost"
+              className={cn("h-8 px-3 text-sm cursor-pointer transition-colors", viewMode === "year" ? "bg-background shadow-sm" : "hover:bg-background/50")}
+              onClick={() => setViewMode("year")}
+            >
+              Horizonte Anual
+            </Button>
+          </div>
+        </div>
 
         <Dialog
           open={dialogOpen}
@@ -480,224 +518,313 @@ export default function LancamentosPage() {
       </div>
 
       <div className="flex flex-col gap-6">
-        {/* ── Navegador de mês e Resumos ──────────────────── */}
-        {/* Navegador de mês limpo */}
-        <div className="flex items-center justify-center gap-4 py-2">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={prevMonth}
-            aria-label="Mês anterior"
-            className="cursor-pointer"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <span className="min-w-[100px] text-center font-heading text-lg font-semibold uppercase tracking-widest text-foreground">
-            {formatMonthNav(currentMonth, currentYear)}
-          </span>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={nextMonth}
-            aria-label="Próximo mês"
-            className="cursor-pointer"
-          >
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-        </div>
+        {viewMode === "month" ? (
+          <>
+            {/* ── Navegador de mês e Resumos ──────────────────── */}
+            {/* Navegador de mês limpo */}
+            <div className="flex items-center justify-center gap-4 py-2">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={prevMonth}
+                aria-label="Mês anterior"
+                className="cursor-pointer"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <span className="min-w-[100px] text-center font-heading text-lg font-semibold uppercase tracking-widest text-foreground">
+                {formatMonthNav(currentMonth, currentYear)}
+              </span>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={nextMonth}
+                aria-label="Próximo mês"
+                className="cursor-pointer"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
 
-        {/* Resumos */}
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          <Card className="border-border bg-card">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
-                Saldo Total
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className={cn("text-2xl font-bold", summary.balance >= 0 ? "text-foreground" : "text-destructive")}>
-                {formatCurrency(summary.balance)}
-              </div>
-            </CardContent>
-          </Card>
-          <Card className="border-border bg-card">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
-                Entradas
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-success">{formatCurrency(summary.income)}</div>
-            </CardContent>
-          </Card>
-          <Card className="border-border bg-card">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
-                Saídas
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-destructive">{formatCurrency(summary.expense)}</div>
-            </CardContent>
-          </Card>
-        </div>
+            {/* Resumos */}
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+              <Card className="border-border bg-card">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
+                    Saldo Total
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className={cn("text-2xl font-bold", summary.balance >= 0 ? "text-foreground" : "text-destructive")}>
+                    {formatCurrency(summary.balance)}
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="border-border bg-card">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
+                    Entradas
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-success">{formatCurrency(summary.income)}</div>
+                </CardContent>
+              </Card>
+              <Card className="border-border bg-card">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
+                    Saídas
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-destructive">{formatCurrency(summary.expense)}</div>
+                </CardContent>
+              </Card>
+            </div>
 
-        {/* ── Tabela de lançamentos ─────────────────────── */}
-        <div className="flex flex-col gap-4">
+            {/* ── Tabela de lançamentos ─────────────────────── */}
+            <div className="flex flex-col gap-4">
 
-          <Card className="overflow-hidden border-border bg-card">
-            <CardContent className="p-0">
-              {isLoading ? (
-                /* Skeleton loading */
-                <div className="flex flex-col gap-0">
-                  {Array.from({ length: 5 }).map((_, i) => (
-                    <div
-                      key={i}
-                      className="flex items-center gap-4 border-b border-border px-4 py-4 last:border-b-0"
-                    >
-                      <div className="h-8 w-8 animate-pulse rounded-full bg-muted" />
-                      <div className="flex flex-1 flex-col gap-1">
-                        <div className="h-3 w-32 animate-pulse rounded bg-muted" />
-                        <div className="h-2 w-20 animate-pulse rounded bg-muted/60" />
-                      </div>
-                      <div className="h-3 w-16 animate-pulse rounded bg-muted" />
+              <Card className="overflow-hidden border-border bg-card">
+                <CardContent className="p-0">
+                  {isLoading ? (
+                    /* Skeleton loading */
+                    <div className="flex flex-col gap-0">
+                      {Array.from({ length: 5 }).map((_, i) => (
+                        <div
+                          key={i}
+                          className="flex items-center gap-4 border-b border-border px-4 py-4 last:border-b-0"
+                        >
+                          <div className="h-8 w-8 animate-pulse rounded-full bg-muted" />
+                          <div className="flex flex-1 flex-col gap-1">
+                            <div className="h-3 w-32 animate-pulse rounded bg-muted" />
+                            <div className="h-2 w-20 animate-pulse rounded bg-muted/60" />
+                          </div>
+                          <div className="h-3 w-16 animate-pulse rounded bg-muted" />
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
-              ) : filteredTransactions.length === 0 ? (
-                <div className="flex flex-col items-center justify-center gap-2 px-4 py-12 text-muted-foreground">
-                  <DollarSign className="h-10 w-10 opacity-20" />
-                  <p className="text-sm">Nenhum lançamento neste mês</p>
-                  <Button variant="outline" size="sm" className="mt-2" onClick={openNewDialog}>
-                    Adicionar primeiro lançamento
-                  </Button>
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <tbody>
-                      {filteredTransactions.map((t: Transaction) => {
-                        const cat = t.category
-                        const CategoryIcon = getIconComponent(cat?.icon_name ?? "")
-                        return (
-                          <tr
-                            key={t.code}
-                            className="group border-b border-border transition-all last:border-b-0 hover:bg-secondary/30"
-                          >
-                            {/* Ícone da categoria / cor */}
-                            <td className="px-4 py-4 text-center w-16">
-                              <div
-                                className="flex h-10 w-10 items-center justify-center rounded-lg transition-transform group-hover:scale-110"
-                                style={{
-                                  backgroundColor: cat ? cat.color + "20" : "var(--secondary)",
-                                  color: cat?.color ?? "var(--muted-foreground)",
-                                }}
+                  ) : filteredTransactions.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center gap-2 px-4 py-12 text-muted-foreground">
+                      <DollarSign className="h-10 w-10 opacity-20" />
+                      <p className="text-sm">Nenhum lançamento neste mês</p>
+                      <Button variant="outline" size="sm" className="mt-2" onClick={openNewDialog}>
+                        Adicionar primeiro lançamento
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <tbody>
+                          {filteredTransactions.map((t: Transaction) => {
+                            const cat = t.category
+                            const CategoryIcon = getIconComponent(cat?.icon_name ?? "")
+                            return (
+                              <tr
+                                key={t.code}
+                                className="group border-b border-border transition-all last:border-b-0 hover:bg-secondary/30"
                               >
-                                <CategoryIcon className="h-5 w-5" style={{ color: cat?.color }} />
-                              </div>
-                            </td>
+                                {/* Ícone da categoria / cor */}
+                                <td className="px-4 py-4 text-center w-16">
+                                  <div
+                                    className="flex h-10 w-10 items-center justify-center rounded-lg transition-transform group-hover:scale-110"
+                                    style={{
+                                      backgroundColor: cat ? cat.color + "20" : "var(--secondary)",
+                                      color: cat?.color ?? "var(--muted-foreground)",
+                                    }}
+                                  >
+                                    <CategoryIcon className="h-5 w-5" style={{ color: cat?.color }} />
+                                  </div>
+                                </td>
 
-                            {/* Título e categoria */}
-                            <td className="px-4 py-4">
-                              <span
-                                className="text-sm font-semibold leading-none text-foreground cursor-pointer transition-colors group-hover:text-primary"
-                                onClick={() => openEditDialog(t)}
-                              >
-                                {t.title}
-                              </span>
-                            </td>
+                                {/* Título e categoria */}
+                                <td className="px-4 py-4">
+                                  <span
+                                    className="text-sm font-semibold leading-none text-foreground cursor-pointer transition-colors group-hover:text-primary"
+                                    onClick={() => openEditDialog(t)}
+                                  >
+                                    {t.title}
+                                  </span>
+                                </td>
 
-                            {/* Data */}
-                            <td className="px-4 py-4 text-sm font-medium text-muted-foreground">
-                              {t.due_date}
-                            </td>
+                                {/* Data */}
+                                <td className="px-4 py-4 text-sm font-medium text-muted-foreground">
+                                  {t.due_date}
+                                </td>
 
-                            {/* Valor */}
-                            <td
-                              className={cn(
-                                "px-4 py-4 text-right text-sm font-bold",
-                                t.type === "income" ? "text-success" : "text-destructive"
-                              )}
-                            >
-                              {t.type === "income" ? "+" : "-"}R$ {t.amount}
-                            </td>
-
-                            {/* Botão de status (pago/pendente) */}
-                            <td className="px-4 py-4 text-center">
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => handleTogglePay(t)}
-                                title={t.is_paid ? "Marcar como pendente" : "Marcar como pago"}
-                                className={cn(
-                                  "h-8 w-8 cursor-pointer rounded-full transition-all",
-                                  t.is_paid
-                                    ? "bg-success/15 text-success shadow-sm shadow-success/20 hover:bg-success/25"
-                                    : "bg-secondary text-muted-foreground hover:bg-secondary hover:text-foreground/80"
-                                )}
-                              >
-                                <DollarSign className={cn("h-4 w-4 stroke-[2.5]", !t.is_paid && "opacity-60")} />
-                              </Button>
-                            </td>
-
-                            {/* Ações: editar + remover */}
-                            <td className="px-2 py-4 text-center">
-                              <div className="flex items-center gap-1 opacity-100 transition-opacity">
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => openEditDialog(t)}
-                                  className="h-7 w-7 cursor-pointer text-muted-foreground hover:text-foreground"
-                                  aria-label="Editar lançamento"
+                                {/* Valor */}
+                                <td
+                                  className={cn(
+                                    "px-4 py-4 text-right text-sm font-bold",
+                                    t.type === "income" ? "text-success" : "text-destructive"
+                                  )}
                                 >
-                                  <Pencil className="h-3.5 w-3.5" />
-                                </Button>
+                                  {t.type === "income" ? "+" : "-"}R$ {t.amount}
+                                </td>
 
-                                <AlertDialog>
-                                  <AlertDialogTrigger asChild>
+                                {/* Botão de status (pago/pendente) */}
+                                <td className="px-4 py-4 text-center">
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => handleTogglePay(t)}
+                                    title={t.is_paid ? "Marcar como pendente" : "Marcar como pago"}
+                                    className={cn(
+                                      "h-8 w-8 cursor-pointer rounded-full transition-all",
+                                      t.is_paid
+                                        ? "bg-success/15 text-success shadow-sm shadow-success/20 hover:bg-success/25"
+                                        : "bg-secondary text-muted-foreground hover:bg-secondary hover:text-foreground/80"
+                                    )}
+                                  >
+                                    <DollarSign className={cn("h-4 w-4 stroke-[2.5]", !t.is_paid && "opacity-60")} />
+                                  </Button>
+                                </td>
+
+                                {/* Ações: editar + remover */}
+                                <td className="px-2 py-4 text-center">
+                                  <div className="flex items-center gap-1 opacity-100 transition-opacity">
                                     <Button
                                       variant="ghost"
                                       size="icon"
-                                      className="h-7 w-7 cursor-pointer text-muted-foreground hover:text-destructive"
-                                      aria-label="Remover lançamento"
+                                      onClick={() => openEditDialog(t)}
+                                      className="h-7 w-7 cursor-pointer text-muted-foreground hover:text-foreground"
+                                      aria-label="Editar lançamento"
                                     >
-                                      <Trash2 className="h-3.5 w-3.5" />
+                                      <Pencil className="h-3.5 w-3.5" />
                                     </Button>
-                                  </AlertDialogTrigger>
-                                  <AlertDialogContent>
-                                    <AlertDialogHeader>
-                                      <AlertDialogTitle className="font-heading">
-                                        Remover lançamento
-                                      </AlertDialogTitle>
-                                      <AlertDialogDescription>
-                                        Tem certeza que deseja remover{" "}
-                                        <span className="font-medium">{t.title}</span>? Esta ação
-                                        não pode ser desfeita.
-                                      </AlertDialogDescription>
-                                    </AlertDialogHeader>
-                                    <AlertDialogFooter>
-                                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                      <AlertDialogAction
-                                        onClick={() => handleDelete(t.code)}
-                                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                                      >
-                                        Remover
-                                      </AlertDialogAction>
-                                    </AlertDialogFooter>
-                                  </AlertDialogContent>
-                                </AlertDialog>
-                              </div>
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+
+                                    <AlertDialog>
+                                      <AlertDialogTrigger asChild>
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-7 w-7 cursor-pointer text-muted-foreground hover:text-destructive"
+                                          aria-label="Remover lançamento"
+                                        >
+                                          <Trash2 className="h-3.5 w-3.5" />
+                                        </Button>
+                                      </AlertDialogTrigger>
+                                      <AlertDialogContent>
+                                        <AlertDialogHeader>
+                                          <AlertDialogTitle className="font-heading">
+                                            Remover lançamento
+                                          </AlertDialogTitle>
+                                          <AlertDialogDescription>
+                                            Tem certeza que deseja remover{" "}
+                                            <span className="font-medium">{t.title}</span>? Esta ação
+                                            não pode ser desfeita.
+                                          </AlertDialogDescription>
+                                        </AlertDialogHeader>
+                                        <AlertDialogFooter>
+                                          <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                          <AlertDialogAction
+                                            onClick={() => handleDelete(t.code)}
+                                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                          >
+                                            Remover
+                                          </AlertDialogAction>
+                                        </AlertDialogFooter>
+                                      </AlertDialogContent>
+                                    </AlertDialog>
+                                  </div>
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          </>
+        ) : (
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center justify-end">
+              <div className="flex items-center gap-2">
+                <Label className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Ano do Planejamento</Label>
+                <Select value={String(planningYear)} onValueChange={(v) => setPlanningYear(Number(v))}>
+                  <SelectTrigger className="w-[120px] font-heading font-bold cursor-pointer transition-colors">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[planningYear - 2, planningYear - 1, planningYear, planningYear + 1, planningYear + 2].sort().map((y) => (
+                      <SelectItem key={y} value={String(y)} className="cursor-pointer">
+                        {y}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <Card className="overflow-hidden border-border bg-card">
+              <CardContent className="p-0">
+                {isLoadingPlanning ? (
+                  <div className="p-8 text-center text-muted-foreground flex items-center justify-center">
+                    <Loader2 className="h-6 w-6 animate-spin mr-2" /> Carregando visão anual...
+                  </div>
+                ) : yearlyData.length === 0 ? (
+                  <div className="p-12 text-center text-muted-foreground">
+                    <p>Nenhum dado encontrado para o ano {planningYear}.</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-border bg-secondary/20">
+                          <th className="px-4 py-3 text-left font-semibold text-muted-foreground w-[200px]">Categoria</th>
+                          {months.map((m) => (
+                            <th key={m} className="px-4 py-3 text-right font-semibold text-muted-foreground">
+                              {m.substring(0, 3)}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {yearlyData.map((row) => {
+                          const cat = row.category
+                          const CategoryIcon = getIconComponent(cat?.icon_name ?? "")
+                          return (
+                            <tr
+                              key={cat?.title}
+                              className="group border-b border-border transition-colors hover:bg-secondary/30 last:border-b-0 cursor-pointer"
+                            >
+                              <td className="px-4 py-3">
+                                <div className="flex items-center gap-2">
+                                  <div
+                                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md transition-transform group-hover:scale-110"
+                                    style={{
+                                      backgroundColor: cat ? cat.color + "20" : "var(--secondary)",
+                                      color: cat?.color ?? "var(--muted-foreground)",
+                                    }}
+                                  >
+                                    <CategoryIcon className="h-3 w-3" style={{ color: cat?.color }} />
+                                  </div>
+                                  <span className="font-semibold text-foreground truncate">{cat?.title}</span>
+                                </div>
+                              </td>
+                              {row.months.map((val, idx) => (
+                                <td key={idx} className="px-4 py-3 text-right font-medium">
+                                  {val === 0 ? (
+                                    <span className="text-muted-foreground/30">-</span>
+                                  ) : (
+                                    formatCurrency(val)
+                                  )}
+                                </td>
+                              ))}
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        )}
       </div>
     </div>
   )

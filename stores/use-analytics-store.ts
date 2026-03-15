@@ -14,16 +14,18 @@ export interface AccumulatedData {
 }
 
 export interface TrendData {
+  category_code: string
   category_name: string
   category_color: string
-  current_total: number
-  previous_total: number
-  trend: "up" | "down" | "stable"
+  history: number[]
+  m: number
+  b: number
+  r2: number
+  projected_total: number
 }
 
 interface AnalyticsStore {
   dateRange: { from: Date; to: Date }
-  currentMonth: number
   currentYear: number
   
   byCategoryData: CategoryData[]
@@ -59,8 +61,7 @@ const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0)
 export const useAnalyticsStore = create<AnalyticsStore>((set, get) => ({
   dateRange: { from: firstDay, to: lastDay },
   
-  // Usado apenas localmente para o Trend Data que requer mês exato
-  currentMonth: today.getMonth() + 1,
+  // Usado ano base para o Trend Data
   currentYear: today.getFullYear(),
   
   byCategoryData: [],
@@ -138,7 +139,7 @@ export const useAnalyticsStore = create<AnalyticsStore>((set, get) => ({
   fetchTrendByCategory: async () => {
     set({ isLoadingTrend: true, errorTrend: null })
     try {
-      const { currentMonth, currentYear, selectedCategoryIds } = get()
+      const { currentYear, selectedCategoryIds } = get()
       
       // Se não houver categorias, limpamos o array e não buscamos
       if (selectedCategoryIds.length === 0) {
@@ -147,7 +148,6 @@ export const useAnalyticsStore = create<AnalyticsStore>((set, get) => ({
       }
       
       const queryParams = new URLSearchParams()
-      queryParams.append("month", currentMonth.toString())
       queryParams.append("year", currentYear.toString())
       
       selectedCategoryIds.forEach(id => {

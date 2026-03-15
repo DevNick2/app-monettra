@@ -10,7 +10,6 @@ import { logoutAction } from "@/app/actions/auth"
 const navItems = [
   { href: "/app", label: "Inicio", icon: Landmark },
   { href: "/app/lancamentos", label: "Lancamentos", icon: FileText },
-  { href: "/app/planejamento", label: "Planejamento", icon: ScrollText },
   { href: "/app/analytics", label: "Graficos", icon: BarChart2 },
   { href: "/app/categorias", label: "Categorias", icon: Tags },
   { href: "/app/perfil", label: "Perfil", icon: User },
@@ -45,11 +44,10 @@ export function AppHeader() {
               <Link
                 key={item.href}
                 href={item.href}
-                className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors ${
-                  isActive
+                className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors ${isActive
                     ? "bg-primary/10 text-primary font-medium"
                     : "text-muted-foreground hover:bg-secondary hover:text-foreground"
-                }`}
+                  }`}
               >
                 <Icon className="h-4 w-4" />
                 {item.label}
@@ -90,11 +88,10 @@ export function AppHeader() {
                   key={item.href}
                   href={item.href}
                   onClick={() => setMobileMenuOpen(false)}
-                  className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors ${
-                    isActive
+                  className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors ${isActive
                       ? "bg-primary/10 text-primary font-medium"
                       : "text-muted-foreground hover:bg-secondary hover:text-foreground"
-                  }`}
+                    }`}
                 >
                   <Icon className="h-4 w-4" />
                   {item.label}

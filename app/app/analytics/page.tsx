@@ -78,10 +78,10 @@ export default function AnalyticsPage() {
   const barSeriesData = accumulatedData.map(d => d.total)
 
   // O chart de linhas com x-axis categórico
-  const lineXAxis = ['Mês Anterior', 'Mês Atual']
+  const lineXAxis = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
   const lineSeries = trendData.map(d => ({
-    data: [d.previous_total, d.current_total],
-    label: d.category_name,
+    data: d.history,
+    label: `${d.category_name} (R²: ${(d.r2 * 100).toFixed(0)}%)`,
     color: d.category_color,
   }))
 
@@ -245,9 +245,9 @@ export default function AnalyticsPage() {
               Tendência por Categoria
             </CardTitle>
             <CardDescription className="flex flex-col gap-1">
-              <span>Comparativo de evolução entre o mês anterior e o atual.</span>
+              <span>Evolução das despesas ao longo dos 12 meses do ano e projeção em linha de tendência usando Mínimos Quadrados.</span>
               <span className="text-xs italic bg-secondary/50 p-1 rounded w-fit">
-                Este gráfico é de âmbito exclusivamente <b>Mensal</b> e não reage ao filtro de data superior.
+                Baseado no Ano Atual e isolado de outros filtros. (R² mede a previsibilidade de 0% a 100%)
               </span>
             </CardDescription>
             
@@ -298,7 +298,7 @@ export default function AnalyticsPage() {
                  </Select>
                  <TrendingUp className="h-12 w-12 text-primary/40" />
                  <p className="text-center font-medium">Nenhuma categoria selecionada</p>
-                 <p className="text-center text-xs opacity-70">Adicione categorias no filtro acima para comparar as métricas do mês atual com as do mês anterior.</p>
+                 <p className="text-center text-xs opacity-70">Adicione categorias no filtro acima para visualizar a linha de tendência (OLS) do ano atual.</p>
                </div>
             ) : lineSeries.length === 0 ? (
               <div className="text-muted-foreground text-sm flex flex-col items-center gap-2">

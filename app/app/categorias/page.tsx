@@ -18,7 +18,13 @@ import {
   Wifi,
   Droplets,
   Phone,
+  DollarSign,
+  Users,
+  PawPrint,
+  Landmark,
+  BanknoteArrowDown
 } from "lucide-react"
+
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -43,7 +49,8 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { useCategoriesStore } from "@/stores/use-categories-store"
-import type { Category, CreateCategoryPayload } from "@/lib/types"
+import type { Category, CreateCategoryPayload, TransactionType } from "@/lib/types"
+import { cn } from "@/lib/utils"
 
 // ─── Opções de ícones disponíveis ──────────────────────────
 const iconOptions = [
@@ -59,6 +66,11 @@ const iconOptions = [
   { name: "Wifi", icon: Wifi },
   { name: "Droplets", icon: Droplets },
   { name: "Phone", icon: Phone },
+  { name: "DollarSign", icon: DollarSign },
+  { name: "Users", icon: Users },
+  { name: "PawPrint", icon: PawPrint },
+  { name: "Landmark", icon: Landmark },
+  { name: "BanknoteArrowDown", icon: BanknoteArrowDown },
 ]
 
 // ─── Paleta de cores do design system Monettra ─────────────
@@ -96,6 +108,8 @@ export default function CategoriasPage() {
   const [formName, setFormName] = useState("")
   const [formColor, setFormColor] = useState(colorOptions[0])
   const [formIcon, setFormIcon] = useState("Home")
+  const [formType, setFormType] = useState("")
+  const [newType, setNewType] = useState<TransactionType>("expense")
 
   // ─── Inicialização ─────────────────────────────────────────
   useEffect(() => {
@@ -120,6 +134,7 @@ export default function CategoriasPage() {
     setFormName(cat.title)
     setFormColor(cat.color)
     setFormIcon(cat.icon_name)
+    setFormType(cat.type)
     setDialogOpen(true)
   }
 
@@ -132,6 +147,7 @@ export default function CategoriasPage() {
       title: formName,
       color: formColor,
       icon_name: formIcon,
+      type: newType,
     }
 
     try {
@@ -187,6 +203,41 @@ export default function CategoriasPage() {
                 {editingCategory ? "Editar Categoria" : "Nova Categoria"}
               </DialogTitle>
             </DialogHeader>
+
+            {/* Tipo de transação */}
+            <div className="flex flex-col gap-2">
+              <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Tipo
+              </Label>
+              <div className="grid grid-cols-2 gap-2 rounded-lg bg-secondary/50 p-1">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className={cn(
+                    "flex-1 cursor-pointer gap-2 transition-all",
+                    newType === "income"
+                      ? "bg-success text-white hover:bg-success/90"
+                      : "hover:bg-success/20 hover:text-success"
+                  )}
+                  onClick={() => setNewType("income")}
+                >
+                  Entrada
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className={cn(
+                    "flex-1 cursor-pointer gap-2 transition-all",
+                    newType === "expense"
+                      ? "bg-destructive text-white hover:bg-destructive/90"
+                      : "hover:bg-destructive/20 hover:text-destructive"
+                  )}
+                  onClick={() => setNewType("expense")}
+                >
+                  Saída
+                </Button>
+              </div>
+            </div>
 
             <form onSubmit={handleSubmit} className="flex flex-col gap-5 pt-2">
               {/* Nome */}
