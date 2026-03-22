@@ -1,18 +1,21 @@
 "use client"
 
-import React, { useState, useEffect, useMemo } from "react"
+import React, { useState, useEffect, useMemo, useCallback } from "react"
 import {
   ChevronLeft,
   ChevronRight,
   Plus,
-  DollarSign,
   Loader2,
   Pencil,
   Trash2,
   Home,
+  ThumbsUp,
+  ThumbsDown,
+  RepeatIcon,
 } from "lucide-react"
 import * as iconOptions from "lucide-react"
 import { toast } from "sonner"
+import { format, getDaysInMonth } from "date-fns"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
@@ -42,10 +45,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { Switch } from "@/components/ui/switch"
 import { cn } from "@/lib/utils"
 import { useTransactionsStore } from "@/stores/use-transactions-store"
 import { useCategoriesStore } from "@/stores/use-categories-store"
-import type { Transaction, TransactionType, CreateTransactionPayload } from "@/lib/types"
+import type {
+  Transaction,
+  TransactionType,
+  CreateTransactionPayload,
+  RecurrenceScope,
+} from "@/lib/types"
 
 const months = [
   "Janeiro",
@@ -67,6 +76,273 @@ function getIconComponent(iconName: string) {
   return Icon || Home
 }
 
+/** Gera a data padrão do modal: currentYear/currentMonth, dia = hoje (clampado ao limite do mês) */
+function buildDefaultDate(month: number, year: number): string {
+  const today = new Date()
+  const todayDay = today.getDate()
+  const daysInTargetMonth = getDaysInMonth(new Date(year, month))
+  const clampedDay = Math.min(todayDay, daysInTargetMonth)
+  return format(new Date(year, month, clampedDay), "yyyy-MM-dd")
+}
+
+// ─── Subcomponente: Modal de Escopo de Decisão ────────────────
+// Intercepts delete/edit on recurring transactions
+interface ScopeDialogProps {
+  open: boolean
+  onClose: () => void
+  onConfirm: (scope: RecurrenceScope) => void
+  mode: "delete" | "edit"
+  transactionTitle: string
+}
+
+function ScopeDialog({ open, onClose, onConfirm, mode, transactionTitle }: ScopeDialogProps) {
+  const [selectedScope, setSelectedScope] = useState<RecurrenceScope>("single")
+
+  const isDelete = mode === "delete"
+  const color = isDelete ? "destructive" : "primary"
+
+  return (
+    <AlertDialog open={open} onOpenChange={(o) => { if (!o) onClose() }}>
+      <AlertDialogContent className="sm:max-w-[440px]">
+        <AlertDialogHeader>
+          <AlertDialogTitle className="font-heading text-lg">
+            {isDelete ? "Remover lançamento recorrente" : "Editar lançamento recorrente"}
+          </AlertDialogTitle>
+          <AlertDialogDescription>
+            <span className="font-medium text-foreground">{transactionTitle}</span> faz parte de uma recorrência.
+            Como você deseja aplicar esta {isDelete ? "remoção" : "edição"}?
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+
+        <div className="flex flex-col gap-2 py-2">
+          {[
+            { value: "single" as RecurrenceScope, label: "Apenas este lançamento", desc: "Altera somente este registro." },
+            { value: "forward" as RecurrenceScope, label: "Este e os próximos", desc: "Mantém o passado intocado. Afeta este e os lançamentos futuros da série." },
+            { value: "all" as RecurrenceScope, label: "Todos da série", desc: "Aplica a toda a recorrência (passado, presente e futuro)." },
+          ].map(({ value, label, desc }) => (
+            <button
+              key={value}
+              type="button"
+              className={cn(
+                "flex flex-col items-start gap-0.5 rounded-lg border px-4 py-3 text-left transition-all cursor-pointer",
+                selectedScope === value
+                  ? isDelete
+                    ? "border-destructive bg-destructive/10"
+                    : "border-primary bg-primary/10"
+                  : "border-border bg-secondary/20 hover:bg-secondary/40"
+              )}
+              onClick={() => setSelectedScope(value)}
+            >
+              <span className={cn(
+                "text-sm font-semibold",
+                selectedScope === value
+                  ? isDelete ? "text-destructive" : "text-primary"
+                  : "text-foreground"
+              )}>
+                {label}
+              </span>
+              <span className="text-xs text-muted-foreground">{desc}</span>
+            </button>
+          ))}
+        </div>
+
+        <AlertDialogFooter>
+          <AlertDialogCancel onClick={onClose}>Cancelar</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={() => onConfirm(selectedScope)}
+            className={isDelete
+              ? "bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              : "bg-primary text-primary-foreground hover:bg-primary/90"
+            }
+          >
+            {isDelete ? "Remover" : "Salvar Alterações"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  )
+}
+
+// ─── Subcomponente: Tabela Anual ───────────────────────────────
+interface AnnualTableProps {
+  title: string
+  rows: { category: any; months: number[]; type: string }[]
+  onCellClick: (category: any, monthIndex: number, transactions: Transaction[]) => void
+  planningTransactions: Transaction[]
+  formatCurrency: (val: number) => string
+}
+
+function AnnualTable({ title, rows, onCellClick, planningTransactions, formatCurrency }: AnnualTableProps) {
+  const monthTotals = useMemo(() => {
+    return Array.from({ length: 12 }, (_, i) =>
+      rows.reduce((acc, row) => acc + row.months[i], 0)
+    )
+  }, [rows])
+
+  if (rows.length === 0) return null
+
+  return (
+    <div className="flex flex-col gap-2">
+      <h3 className="font-heading text-base font-bold text-foreground px-1">{title}</h3>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-border bg-secondary/20">
+              <th className="px-4 py-3 text-left font-semibold text-muted-foreground w-[60px]">
+              </th>
+              {months.map((m) => (
+                <th key={m} className="px-4 py-3 text-right font-semibold text-muted-foreground">
+                  {m.substring(0, 3)}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => {
+              const cat = row.category
+              const CategoryIcon = getIconComponent(cat?.icon_name ?? "")
+              return (
+                <tr
+                  key={cat?.code ?? cat?.title}
+                  className="group border-b border-border transition-colors hover:bg-secondary/30 last:border-b-0"
+                >
+                  <td className="px-4 py-3">
+                    <div className="relative group/tooltip flex items-center justify-center">
+                      <div
+                        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md transition-transform group-hover:scale-110 cursor-default"
+                        style={{
+                          backgroundColor: cat ? cat.color + "20" : "var(--secondary)",
+                          color: cat?.color ?? "var(--muted-foreground)",
+                        }}
+                      >
+                        <CategoryIcon className="h-3 w-3" style={{ color: cat?.color }} />
+                      </div>
+                      <div className="absolute left-8 top-1/2 -translate-y-1/2 z-10 hidden group-hover/tooltip:block bg-foreground text-background text-xs rounded px-2 py-1 whitespace-nowrap shadow-lg">
+                        {cat?.title ?? "Sem Categoria"}
+                      </div>
+                    </div>
+                  </td>
+                  {row.months.map((val, idx) => (
+                    <td
+                      key={idx}
+                      className="px-4 py-3 text-right font-medium cursor-pointer hover:bg-primary/10 rounded transition-colors"
+                      onClick={() => {
+                        if (val > 0) onCellClick(cat, idx, planningTransactions)
+                      }}
+                    >
+                      {val === 0 ? (
+                        <span className="text-muted-foreground/30">-</span>
+                      ) : (
+                        <span className="hover:text-primary transition-colors">
+                          {formatCurrency(val)}
+                        </span>
+                      )}
+                    </td>
+                  ))}
+                </tr>
+              )
+            })}
+            <tr className="border-t-2 border-border bg-secondary/40">
+              <td className="px-4 py-3 text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                Total
+              </td>
+              {monthTotals.map((total, idx) => (
+                <td
+                  key={idx}
+                  className="px-4 py-3 text-right text-xs font-bold text-foreground"
+                >
+                  {total === 0 ? (
+                    <span className="text-muted-foreground/30">-</span>
+                  ) : (
+                    formatCurrency(total)
+                  )}
+                </td>
+              ))}
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+// ─── Subcomponente: Modal de Drill-Down ────────────────────────
+interface DrillDownModalProps {
+  open: boolean
+  onClose: () => void
+  category: any
+  monthIndex: number
+  transactions: Transaction[]
+  formatCurrency: (val: number) => string
+}
+
+function DrillDownModal({ open, onClose, category, monthIndex, transactions, formatCurrency }: DrillDownModalProps) {
+  const filtered = useMemo(() => {
+    if (!category || monthIndex < 0) return []
+    return transactions.filter((t) => {
+      const catKey = t.category?.code || t.category?.title || "sem-categoria"
+      const catMatch =
+        catKey === (category?.code || category?.title || "sem-categoria")
+
+      let tMonthIndex = -1
+      if (t.due_date?.includes("/")) {
+        tMonthIndex = parseInt(t.due_date.split("/")[1], 10) - 1
+      } else if (t.due_date?.includes("-")) {
+        tMonthIndex = parseInt(t.due_date.split("-")[1], 10) - 1
+      }
+      return catMatch && tMonthIndex === monthIndex
+    })
+  }, [category, monthIndex, transactions])
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose() }}>
+      <DialogContent className="sm:max-w-[480px]">
+        <DialogHeader>
+          <DialogTitle className="font-heading text-xl">
+            {category?.title ?? "Categoria"} — {months[monthIndex] ?? ""}
+          </DialogTitle>
+        </DialogHeader>
+        <div className="flex flex-col gap-2 pt-2">
+          {filtered.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-4">Nenhum lançamento encontrado.</p>
+          ) : (
+            filtered.map((t) => {
+              const CatIcon = getIconComponent(t.category?.icon_name ?? "")
+              const valStr = String(t.amount || "0")
+              const clean = valStr.replace(/\./g, "").replace(",", ".")
+              const val = parseFloat(clean) || 0
+              return (
+                <div key={t.code} className="flex items-center gap-3 border-b border-border pb-2 last:border-0 last:pb-0">
+                  <div
+                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md"
+                    style={{
+                      backgroundColor: t.category ? t.category.color + "20" : "var(--secondary)",
+                      color: t.category?.color ?? "var(--muted-foreground)",
+                    }}
+                  >
+                    <CatIcon className="h-3.5 w-3.5" style={{ color: t.category?.color }} />
+                  </div>
+                  <div className="flex flex-1 flex-col gap-0.5">
+                    <span className="text-sm font-semibold text-foreground">{t.title}</span>
+                    <span className="text-xs text-muted-foreground">{t.due_date}</span>
+                  </div>
+                  <span className={cn(
+                    "text-sm font-bold",
+                    t.type === "income" ? "text-success" : "text-destructive"
+                  )}>
+                    {t.type === "income" ? "+" : "-"}R$ {t.amount}
+                  </span>
+                </div>
+              )
+            })
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ─── Componente Principal ──────────────────────────────────────
 export default function LancamentosPage() {
   const [currentMonth, setCurrentMonth] = useState(new Date().getMonth())
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear())
@@ -83,6 +359,7 @@ export default function LancamentosPage() {
     fetchTransactions,
     fetchPlanningTransactions,
     createTransaction,
+    createBatchTransaction,
     payTransaction,
     updateTransaction,
     deleteTransaction,
@@ -94,15 +371,33 @@ export default function LancamentosPage() {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null)
   const [isSaving, setIsSaving] = useState(false)
+  const [isSavingAndNew, setIsSavingAndNew] = useState(false)
+
+  // ─── Scope Dialog (recorrência) ──────────────────────────────
+  const [scopeDialog, setScopeDialog] = useState<{
+    open: boolean
+    mode: "delete" | "edit"
+    transaction: Transaction | null
+    pendingPayload?: any
+  }>({ open: false, mode: "delete", transaction: null })
+
+  // ─── Drill-Down Modal ──────────────────────────────────────
+  const [drillDown, setDrillDown] = useState<{
+    open: boolean
+    category: any
+    monthIndex: number
+  }>({ open: false, category: null, monthIndex: -1 })
 
   // ─── Form states ───────────────────────────────────────────
   const [newTitle, setNewTitle] = useState("")
-  const [newDate, setNewDate] = useState(new Date().toISOString().split("T")[0])
+  const [newDate, setNewDate] = useState(() => buildDefaultDate(new Date().getMonth(), new Date().getFullYear()))
   const [newValue, setNewValue] = useState("")
   const [newType, setNewType] = useState<TransactionType>("expense")
   const [newCategoryCode, setNewCategoryCode] = useState("")
   const [newDescription, setNewDescription] = useState("")
   const [newIsPaid, setNewIsPaid] = useState(false)
+  // Recorrência
+  const [enableRecurrence, setEnableRecurrence] = useState(false)
 
   // ─── Inicialização ─────────────────────────────────────────
   useEffect(() => {
@@ -115,17 +410,22 @@ export default function LancamentosPage() {
     }
   }, [fetchPlanningTransactions, viewMode, planningYear])
 
-  const yearlyData = useMemo(() => {
-    if (!planningTransactions) return []
+  // ─── Dados Anuais com separação income/expense ─────────────
+  const { yearlyIncome, yearlyExpense } = useMemo(() => {
+    if (!planningTransactions) return { yearlyIncome: [], yearlyExpense: [] }
 
-    const map = new Map<string, { category: any; months: number[] }>()
+    const incomeMap = new Map<string, { category: any; months: number[]; type: string }>()
+    const expenseMap = new Map<string, { category: any; months: number[]; type: string }>()
 
     planningTransactions.forEach((t) => {
       const catKey = t.category?.code || t.category?.title || "sem-categoria"
-      if (!map.has(catKey)) {
-        map.set(catKey, {
+      const targetMap = t.type === "income" ? incomeMap : expenseMap
+
+      if (!targetMap.has(catKey)) {
+        targetMap.set(catKey, {
           category: t.category ?? { title: "Sem Categoria", color: "var(--muted-foreground)" },
           months: Array(12).fill(0),
+          type: t.type,
         })
       }
 
@@ -140,11 +440,13 @@ export default function LancamentosPage() {
         monthIndex = parseInt(t.due_date.split("-")[1], 10) - 1
       }
 
-      const item = map.get(catKey)!
-      item.months[monthIndex] += val
+      targetMap.get(catKey)!.months[monthIndex] += val
     })
 
-    return Array.from(map.values())
+    return {
+      yearlyIncome: Array.from(incomeMap.values()),
+      yearlyExpense: Array.from(expenseMap.values()),
+    }
   }, [planningTransactions])
 
   // ─── Helpers de navegação de mês ───────────────────────────
@@ -166,7 +468,6 @@ export default function LancamentosPage() {
     }
   }
 
-  // Filtro aplicado no backend via query params month/year
   const filteredTransactions = transactions
 
   // ─── Resumo de Valores ──────────────────────────────────────
@@ -186,30 +487,35 @@ export default function LancamentosPage() {
       }
     })
 
-    return {
-      income,
-      expense,
-      balance: income - expense,
-    }
+    return { income, expense, balance: income - expense }
   }, [filteredTransactions])
 
   const formatCurrency = (val: number) =>
     val.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
 
   // ─── Resetar formulário ────────────────────────────────────
-  function resetForm() {
+  const resetForm = useCallback(() => {
     setNewTitle("")
-    setNewDate(new Date().toISOString().split("T")[0])
+    setNewDate(buildDefaultDate(currentMonth, currentYear))
     setNewValue("")
     setNewType("expense")
     setNewCategoryCode(categories[0]?.code ?? "")
     setNewDescription("")
     setNewIsPaid(false)
+    setEnableRecurrence(false)
     setEditingTransaction(null)
-  }
+  }, [currentMonth, currentYear, categories])
 
   function openNewDialog() {
-    resetForm()
+    setNewTitle("")
+    setNewDate(buildDefaultDate(currentMonth, currentYear))
+    setNewValue("")
+    setNewType("expense")
+    setNewCategoryCode(categories[0]?.code ?? "")
+    setNewDescription("")
+    setNewIsPaid(false)
+    setEnableRecurrence(false)
+    setEditingTransaction(null)
     fetchCategories()
     setDialogOpen(true)
   }
@@ -228,18 +534,16 @@ export default function LancamentosPage() {
     setNewCategoryCode(t.category_code ?? "")
     setNewDescription(t.description ?? "")
     setNewIsPaid(t.is_paid)
+    setEnableRecurrence(false)
+    fetchCategories()
     setDialogOpen(true)
   }
 
-  // ─── Submit do formulário (criar ou editar) ─────────────────
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    setIsSaving(true)
-
+  // ─── Monta payload ─────────────────────────────────────────
+  function buildPayload(): CreateTransactionPayload {
     const [yyyy, mm, dd] = newDate.split("-")
     const brDate = `${dd}/${mm}/${yyyy}`
-
-    const payload: CreateTransactionPayload = {
+    return {
       title: newTitle,
       amount: newValue,
       type: newType,
@@ -248,14 +552,42 @@ export default function LancamentosPage() {
       category_code: newCategoryCode || null,
       is_paid: newIsPaid,
     }
+  }
+
+  // ─── Submit do formulário (criar ou editar) ─────────────────
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setIsSaving(true)
 
     try {
       if (editingTransaction) {
-        await updateTransaction(editingTransaction.code, payload)
+        // Se é recorrente, pergunta o escopo antes de salvar
+        if (editingTransaction.recurrence_id) {
+          const payload = buildPayload()
+          setScopeDialog({ open: true, mode: "edit", transaction: editingTransaction, pendingPayload: payload })
+          setIsSaving(false)
+          return
+        }
+        await updateTransaction(editingTransaction.code, buildPayload())
         toast.success("Lançamento atualizado com sucesso!")
       } else {
-        await createTransaction(payload)
-        toast.success("Lançamento criado com sucesso!")
+        if (enableRecurrence) {
+          // Usa endpoint batch server-side — 1 único request
+          const [yyyy, mm, dd] = newDate.split("-")
+          await createBatchTransaction({
+            title: newTitle,
+            amount: newValue,
+            type: newType,
+            start_date: `${dd}/${mm}/${yyyy}`,
+            description: newDescription || null,
+            category_code: newCategoryCode || null,
+            is_paid: newIsPaid,
+          })
+          toast.success("Lançamentos recorrentes criados com sucesso!")
+        } else {
+          await createTransaction(buildPayload())
+          toast.success("Lançamento criado com sucesso!")
+        }
       }
       setDialogOpen(false)
       resetForm()
@@ -263,6 +595,48 @@ export default function LancamentosPage() {
       toast.error("Erro ao salvar lançamento. Verifique os dados e tente novamente.")
     } finally {
       setIsSaving(false)
+    }
+  }
+
+  // ─── Salvar e criar outro ──────────────────────────────────
+  async function handleSaveAndNew(e: React.MouseEvent) {
+    e.preventDefault()
+    if (!newTitle || !newValue || !newDate) {
+      toast.error("Preencha os campos obrigatórios antes de salvar.")
+      return
+    }
+    setIsSavingAndNew(true)
+
+    try {
+      if (enableRecurrence) {
+        const [yyyy, mm, dd] = newDate.split("-")
+        await createBatchTransaction({
+          title: newTitle,
+          amount: newValue,
+          type: newType,
+          start_date: `${dd}/${mm}/${yyyy}`,
+          description: newDescription || null,
+          category_code: newCategoryCode || null,
+          is_paid: newIsPaid,
+        })
+      } else {
+        await createTransaction(buildPayload())
+      }
+      toast.success("Lançamento salvo! Formulário pronto para novo registro.")
+
+      const savedDate = newDate
+      setNewTitle("")
+      setNewValue("")
+      setNewType("expense")
+      setNewCategoryCode(categories[0]?.code ?? "")
+      setNewDescription("")
+      setNewIsPaid(false)
+      setEnableRecurrence(false)
+      setNewDate(savedDate)
+    } catch {
+      toast.error("Erro ao salvar lançamento.")
+    } finally {
+      setIsSavingAndNew(false)
     }
   }
 
@@ -276,11 +650,50 @@ export default function LancamentosPage() {
     }
   }
 
+  // ─── Iniciar deleção (intercepta recorrências) ─────────────
+  function initiateDelete(t: Transaction) {
+    if (t.recurrence_id) {
+      setScopeDialog({ open: true, mode: "delete", transaction: t })
+    } else {
+      handleDelete(t.code, "single")
+    }
+  }
+
+  // ─── Confirmar escopo de decisão ──────────────────────────
+  async function handleScopeConfirm(scope: RecurrenceScope) {
+    const { mode, transaction, pendingPayload } = scopeDialog
+    setScopeDialog({ open: false, mode: "delete", transaction: null })
+
+    if (!transaction) return
+
+    if (mode === "delete") {
+      await handleDelete(transaction.code, scope)
+    } else if (mode === "edit" && pendingPayload) {
+      try {
+        await updateTransaction(transaction.code, { ...pendingPayload, scope })
+        toast.success(scope === "single"
+          ? "Lançamento atualizado."
+          : scope === "forward"
+          ? "Este e os próximos lançamentos foram atualizados."
+          : "Toda a série foi atualizada.")
+        setDialogOpen(false)
+        resetForm()
+      } catch {
+        toast.error("Erro ao atualizar lançamentos.")
+      }
+    }
+  }
+
   // ─── Remover lançamento ────────────────────────────────────
-  async function handleDelete(code: string) {
+  async function handleDelete(code: string, scope: RecurrenceScope = "single") {
     try {
-      await deleteTransaction(code)
-      toast.success("Lançamento removido.")
+      await deleteTransaction(code, scope)
+      const msg = scope === "single"
+        ? "Lançamento removido."
+        : scope === "forward"
+        ? "Este e os próximos lançamentos foram removidos."
+        : "Toda a série de lançamentos foi removida."
+      toast.success(msg)
     } catch {
       toast.error("Erro ao remover lançamento.")
     }
@@ -290,6 +703,8 @@ export default function LancamentosPage() {
     const monthName = months[monthIdx].substring(0, 3)
     return `${monthName}/${year}`
   }
+
+  const isSubmitting = isSaving || isSavingAndNew
 
   return (
     <div className="flex flex-col gap-6">
@@ -311,217 +726,267 @@ export default function LancamentosPage() {
               className={cn("h-8 px-3 text-sm cursor-pointer transition-colors", viewMode === "year" ? "bg-background shadow-sm" : "hover:bg-background/50")}
               onClick={() => setViewMode("year")}
             >
-              Horizonte Anual
+              Visualização Anual
             </Button>
           </div>
         </div>
 
-        <Dialog
-          open={dialogOpen}
-          onOpenChange={(open) => {
-            setDialogOpen(open)
-            if (!open) resetForm()
-          }}
-        >
-          <DialogTrigger asChild>
-            <Button className="gap-2 shadow-lg transition-all hover:scale-105" onClick={openNewDialog}>
-              <Plus className="h-4 w-4" />
-              Novo Lançamento
-            </Button>
-          </DialogTrigger>
+        {/* Botão fixo no topo da página (sticky) */}
+        <div className="sticky top-4 z-10">
+          <Dialog
+            open={dialogOpen}
+            onOpenChange={(open) => {
+              setDialogOpen(open)
+              if (!open) resetForm()
+            }}
+          >
+            <DialogTrigger asChild>
+              <Button
+                className="gap-2 shadow-lg transition-all hover:scale-105 bg-primary text-white hover:bg-primary/90"
+                onClick={openNewDialog}
+              >
+                <Plus className="h-4 w-4" />
+                Novo Lançamento
+              </Button>
+            </DialogTrigger>
 
-          <DialogContent className="sm:max-w-[480px]">
-            <DialogHeader>
-              <DialogTitle className="font-heading text-xl">
-                {editingTransaction ? "Editar Lançamento" : "Novo Lançamento"}
-              </DialogTitle>
-            </DialogHeader>
+            <DialogContent className="sm:max-w-[480px]">
+              <DialogHeader>
+                <DialogTitle className="font-heading text-xl">
+                  {editingTransaction ? "Editar Lançamento" : "Novo Lançamento"}
+                </DialogTitle>
+              </DialogHeader>
 
-            <form onSubmit={handleSubmit} className="flex flex-col gap-5 pt-2">
-              {/* Tipo de transação */}
-              <div className="flex flex-col gap-2">
-                <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Tipo
-                </Label>
-                <div className="grid grid-cols-2 gap-2 rounded-lg bg-secondary/50 p-1">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    className={cn(
-                      "flex-1 cursor-pointer gap-2 transition-all",
-                      newType === "income"
-                        ? "bg-success text-white hover:bg-success/90"
-                        : "hover:bg-success/20 hover:text-success"
-                    )}
-                    onClick={() => setNewType("income")}
-                  >
-                    Entrada
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    className={cn(
-                      "flex-1 cursor-pointer gap-2 transition-all",
-                      newType === "expense"
-                        ? "bg-destructive text-white hover:bg-destructive/90"
-                        : "hover:bg-destructive/20 hover:text-destructive"
-                    )}
-                    onClick={() => setNewType("expense")}
-                  >
-                    Saída
-                  </Button>
-                </div>
-              </div>
-
-              {/* Linha 1: Valor + Data */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="flex flex-col gap-2">
-                  <Label
-                    htmlFor="value"
-                    className="text-xs font-semibold uppercase tracking-wider text-muted-foreground"
-                  >
-                    Valor (R$)
-                  </Label>
-                  <Input
-                    id="value"
-                    type="text"
-                    placeholder="0,00"
-                    className="text-lg font-bold"
-                    value={newValue}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                      const onlyDigits = e.target.value.replace(/\D/g, "")
-                      if (!onlyDigits) {
-                        setNewValue("")
-                        return
-                      }
-                      const numericValue = parseInt(onlyDigits, 10) / 100
-                      setNewValue(
-                        numericValue.toLocaleString("pt-BR", {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })
-                      )
-                    }}
-                    required
-                  />
-                </div>
-                <div className="flex flex-col gap-2">
-                  <Label
-                    htmlFor="date"
-                    className="text-xs font-semibold uppercase tracking-wider text-muted-foreground"
-                  >
-                    Data da Transação
-                  </Label>
-                  <Input
-                    id="date"
-                    type="date"
-                    value={newDate}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewDate(e.target.value)}
-                    required
-                  />
-                </div>
-              </div>
-
-              {/* Título */}
-              <div className="flex flex-col gap-2">
-                <Label
-                  htmlFor="title"
-                  className="text-xs font-semibold uppercase tracking-wider text-muted-foreground"
-                >
-                  Título
-                </Label>
-                <Input
-                  id="title"
-                  placeholder="Ex: Compra Mensal"
-                  value={newTitle}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewTitle(e.target.value)}
-                  required
-                />
-              </div>
-
-              {/* Categoria */}
-              {categories.length > 0 && (
+              <form onSubmit={handleSubmit} className="flex flex-col gap-5 pt-2">
+                {/* 1º Tipo de transação */}
                 <div className="flex flex-col gap-2">
                   <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Categoria
+                    Tipo
                   </Label>
-                  <Select value={newCategoryCode} onValueChange={setNewCategoryCode}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecionar categoria" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {categories.map((cat: { code: string; title: string }) => (
-                        <SelectItem key={cat.code} value={cat.code}>
-                          {cat.title}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <div className="grid grid-cols-2 gap-2 rounded-lg bg-secondary/50 p-1">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className={cn(
+                        "flex-1 cursor-pointer gap-2 transition-all",
+                        newType === "income"
+                          ? "bg-success text-white hover:bg-success/90"
+                          : "hover:bg-success/20 hover:text-success"
+                      )}
+                      onClick={() => setNewType("income")}
+                    >
+                      Receitas
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className={cn(
+                        "flex-1 cursor-pointer gap-2 transition-all",
+                        newType === "expense"
+                          ? "bg-destructive text-white hover:bg-destructive/90"
+                          : "hover:bg-destructive/20 hover:text-destructive"
+                      )}
+                      onClick={() => setNewType("expense")}
+                    >
+                      Despesas
+                    </Button>
+                  </div>
                 </div>
-              )}
 
-              {/* Descrição */}
-              <div className="flex flex-col gap-2">
-                <Label
-                  htmlFor="desc"
-                  className="text-xs font-semibold uppercase tracking-wider text-muted-foreground"
-                >
-                  Descrição (Opcional)
-                </Label>
-                <textarea
-                  id="desc"
-                  placeholder="Detalhes adicionais..."
-                  value={newDescription}
-                  onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
-                    setNewDescription(e.target.value)
-                  }
-                  rows={3}
-                  className="flex min-h-[80px] w-full resize-none rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                />
-              </div>
+                {/* 2º Data + Categoria */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="flex flex-col gap-2">
+                    <Label
+                      htmlFor="date"
+                      className="text-xs font-semibold uppercase tracking-wider text-muted-foreground"
+                    >
+                      Data da Transação
+                    </Label>
+                    <Input
+                      id="date"
+                      type="date"
+                      value={newDate}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewDate(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      Categoria
+                    </Label>
+                    {categories.length > 0 ? (
+                      <Select value={newCategoryCode} onValueChange={setNewCategoryCode}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecionar categoria" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {categories.map((cat: { code: string; title: string }) => (
+                            <SelectItem key={cat.code} value={cat.code}>
+                              {cat.title}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <p className="text-xs text-muted-foreground py-2">Nenhuma categoria</p>
+                    )}
+                  </div>
+                </div>
 
-              {/* Já foi pago / Toggle Pago */}
-              <div className="flex items-center gap-3">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  className={cn("h-8 w-8 cursor-pointer rounded-full transition-colors", newIsPaid ? "border-success bg-success/10 text-success" : "text-muted-foreground")}
-                  onClick={() => setNewIsPaid(!newIsPaid)}
-                >
-                  <DollarSign className="h-4 w-4" />
-                </Button>
-                <Label className="text-sm font-semibold cursor-pointer" onClick={() => setNewIsPaid(!newIsPaid)}>
-                  Marcar como {newType === "income" ? "recebido" : "pago"}
-                </Label>
-              </div>
+                {/* 3º Valor + Toggle Pago */}
+                <div className="flex items-end gap-3">
+                  <div className="flex flex-1 flex-col gap-2">
+                    <Label
+                      htmlFor="value"
+                      className="text-xs font-semibold uppercase tracking-wider text-muted-foreground"
+                    >
+                      Valor (R$)
+                    </Label>
+                    <Input
+                      id="value"
+                      type="text"
+                      placeholder="0,00"
+                      className="text-lg font-bold"
+                      value={newValue}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                        const onlyDigits = e.target.value.replace(/\D/g, "")
+                        if (!onlyDigits) {
+                          setNewValue("")
+                          return
+                        }
+                        const numericValue = parseInt(onlyDigits, 10) / 100
+                        setNewValue(
+                          numericValue.toLocaleString("pt-BR", {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })
+                        )
+                      }}
+                      required
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className={cn(
+                      "h-10 w-10 cursor-pointer transition-colors mb-0",
+                      newIsPaid
+                        ? "bg-success/10 text-success hover:bg-success/20"
+                        : "text-muted-foreground hover:bg-secondary"
+                    )}
+                    onClick={() => setNewIsPaid(!newIsPaid)}
+                    title={newIsPaid ? "Marcar como pendente" : `Marcar como ${newType === "income" ? "recebido" : "pago"}`}
+                  >
+                    <ThumbsUp className="h-5 w-5" />
+                  </Button>
+                </div>
 
-              <Button
-                type="submit"
-                className="mt-2 h-12 w-full text-base font-bold"
-                disabled={isSaving}
-              >
-                {isSaving ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Salvando...
-                  </>
-                ) : editingTransaction ? (
-                  "Salvar Alterações"
-                ) : (
-                  "Criar Lançamento"
+                {/* 4º Título */}
+                <div className="flex flex-col gap-2">
+                  <Label
+                    htmlFor="title"
+                    className="text-xs font-semibold uppercase tracking-wider text-muted-foreground"
+                  >
+                    Título
+                  </Label>
+                  <Input
+                    id="title"
+                    placeholder="Ex: Compra Mensal"
+                    value={newTitle}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewTitle(e.target.value)}
+                    required
+                  />
+                </div>
+
+                {/* 5º Descrição */}
+                <div className="flex flex-col gap-2">
+                  <Label
+                    htmlFor="desc"
+                    className="text-xs font-semibold uppercase tracking-wider text-muted-foreground"
+                  >
+                    Descrição (Opcional)
+                  </Label>
+                  <textarea
+                    id="desc"
+                    placeholder="Detalhes adicionais..."
+                    value={newDescription}
+                    onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                      setNewDescription(e.target.value)
+                    }
+                    rows={2}
+                    className="flex min-h-[60px] w-full resize-none rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  />
+                </div>
+
+                {/* Recorrência Fixa (apenas na criação) */}
+                {!editingTransaction && (
+                  <label
+                    className="flex items-center gap-3 rounded-lg border border-border bg-secondary/20 px-3 py-2.5 cursor-pointer hover:bg-secondary/30 transition-colors"
+                    htmlFor="recurrence-switch"
+                  >
+                    <RepeatIcon className="h-4 w-4 text-muted-foreground shrink-0" />
+                    <div className="flex flex-1 flex-col gap-0.5">
+                      <span className="text-sm font-semibold text-foreground">Recorrência Fixa</span>
+                      <span className="text-xs text-muted-foreground">
+                        Cria este lançamento nos meses restantes do ano (server-side)
+                      </span>
+                    </div>
+                    <Switch
+                      id="recurrence-switch"
+                      checked={enableRecurrence}
+                      onCheckedChange={setEnableRecurrence}
+                    />
+                  </label>
                 )}
-              </Button>
-            </form>
-          </DialogContent>
-        </Dialog>
+
+                {/* Botões de ação */}
+                <div className="flex gap-2 mt-2">
+                  {!editingTransaction && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="flex-1 h-11 font-semibold cursor-pointer transition-colors"
+                      disabled={isSubmitting}
+                      onClick={handleSaveAndNew}
+                    >
+                      {isSavingAndNew ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          <span className="animate-pulse bg-muted rounded h-3 w-24 inline-block" />
+                        </>
+                      ) : (
+                        "Salvar e Criar Outro"
+                      )}
+                    </Button>
+                  )}
+                  <Button
+                    type="submit"
+                    className="flex-1 h-11 text-base font-bold bg-success text-white hover:bg-success/90 cursor-pointer transition-colors"
+                    disabled={isSubmitting}
+                  >
+                    {isSaving ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        <span className="animate-pulse bg-success/50 rounded h-3 w-20 inline-block" />
+                      </>
+                    ) : editingTransaction ? (
+                      "Salvar Alterações"
+                    ) : (
+                      "Criar Lançamento"
+                    )}
+                  </Button>
+                </div>
+              </form>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       <div className="flex flex-col gap-6">
         {viewMode === "month" ? (
           <>
             {/* ── Navegador de mês e Resumos ──────────────────── */}
-            {/* Navegador de mês limpo */}
             <div className="flex items-center justify-center gap-4 py-2">
               <Button
                 variant="ghost"
@@ -563,7 +1028,7 @@ export default function LancamentosPage() {
               <Card className="border-border bg-card">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
-                    Entradas
+                    Receitas
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -573,7 +1038,7 @@ export default function LancamentosPage() {
               <Card className="border-border bg-card">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
-                    Saídas
+                    Despesas
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -584,11 +1049,9 @@ export default function LancamentosPage() {
 
             {/* ── Tabela de lançamentos ─────────────────────── */}
             <div className="flex flex-col gap-4">
-
               <Card className="overflow-hidden border-border bg-card">
                 <CardContent className="p-0">
                   {isLoading ? (
-                    /* Skeleton loading */
                     <div className="flex flex-col gap-0">
                       {Array.from({ length: 5 }).map((_, i) => (
                         <div
@@ -606,7 +1069,7 @@ export default function LancamentosPage() {
                     </div>
                   ) : filteredTransactions.length === 0 ? (
                     <div className="flex flex-col items-center justify-center gap-2 px-4 py-12 text-muted-foreground">
-                      <DollarSign className="h-10 w-10 opacity-20" />
+                      <Plus className="h-10 w-10 opacity-20" />
                       <p className="text-sm">Nenhum lançamento neste mês</p>
                       <Button variant="outline" size="sm" className="mt-2" onClick={openNewDialog}>
                         Adicionar primeiro lançamento
@@ -619,12 +1082,13 @@ export default function LancamentosPage() {
                           {filteredTransactions.map((t: Transaction) => {
                             const cat = t.category
                             const CategoryIcon = getIconComponent(cat?.icon_name ?? "")
+                            const isRecurring = !!t.recurrence_id
                             return (
                               <tr
                                 key={t.code}
                                 className="group border-b border-border transition-all last:border-b-0 hover:bg-secondary/30"
                               >
-                                {/* Ícone da categoria / cor */}
+                                {/* Ícone da categoria */}
                                 <td className="px-4 py-4 text-center w-16">
                                   <div
                                     className="flex h-10 w-10 items-center justify-center rounded-lg transition-transform group-hover:scale-110"
@@ -637,14 +1101,21 @@ export default function LancamentosPage() {
                                   </div>
                                 </td>
 
-                                {/* Título e categoria */}
+                                {/* Título + badge de recorrência */}
                                 <td className="px-4 py-4">
-                                  <span
-                                    className="text-sm font-semibold leading-none text-foreground cursor-pointer transition-colors group-hover:text-primary"
-                                    onClick={() => openEditDialog(t)}
-                                  >
-                                    {t.title}
-                                  </span>
+                                  <div className="flex items-center gap-2">
+                                    <span
+                                      className="text-sm font-semibold leading-none text-foreground cursor-pointer transition-colors group-hover:text-primary"
+                                      onClick={() => openEditDialog(t)}
+                                    >
+                                      {t.title}
+                                    </span>
+                                    {isRecurring && (
+                                      <span title="Lançamento recorrente">
+                                        <RepeatIcon className="h-3 w-3 text-muted-foreground/60 shrink-0" />
+                                      </span>
+                                    )}
+                                  </div>
                                 </td>
 
                                 {/* Data */}
@@ -662,7 +1133,7 @@ export default function LancamentosPage() {
                                   {t.type === "income" ? "+" : "-"}R$ {t.amount}
                                 </td>
 
-                                {/* Botão de status (pago/pendente) */}
+                                {/* Botão ThumbsUp/ThumbsDown */}
                                 <td className="px-4 py-4 text-center">
                                   <Button
                                     variant="ghost"
@@ -670,19 +1141,23 @@ export default function LancamentosPage() {
                                     onClick={() => handleTogglePay(t)}
                                     title={t.is_paid ? "Marcar como pendente" : "Marcar como pago"}
                                     className={cn(
-                                      "h-8 w-8 cursor-pointer rounded-full transition-all",
+                                      "h-8 w-8 cursor-pointer transition-all rounded-md",
                                       t.is_paid
-                                        ? "bg-success/15 text-success shadow-sm shadow-success/20 hover:bg-success/25"
-                                        : "bg-secondary text-muted-foreground hover:bg-secondary hover:text-foreground/80"
+                                        ? "bg-success/15 text-success shadow-sm shadow-success/20"
+                                        : "bg-secondary text-muted-foreground",
+                                      t.is_paid
+                                        ? "hover:bg-secondary"
+                                        : "hover:text-white hover:bg-success/75"
                                     )}
                                   >
-                                    <DollarSign className={cn("h-4 w-4 stroke-[2.5]", !t.is_paid && "opacity-60")} />
+                                    <ThumbsUp className={cn("h-4 w-4 stroke-[2.5]", "opacity-60")} />
                                   </Button>
                                 </td>
 
                                 {/* Ações: editar + remover */}
                                 <td className="px-2 py-4 text-center">
-                                  <div className="flex items-center gap-1 opacity-100 transition-opacity">
+                                  {t.type_of_transaction !== 'subscription' ? (
+                                    <div className="flex items-center gap-1 opacity-100 transition-opacity">
                                     <Button
                                       variant="ghost"
                                       size="icon"
@@ -693,40 +1168,56 @@ export default function LancamentosPage() {
                                       <Pencil className="h-3.5 w-3.5" />
                                     </Button>
 
-                                    <AlertDialog>
-                                      <AlertDialogTrigger asChild>
-                                        <Button
-                                          variant="ghost"
-                                          size="icon"
-                                          className="h-7 w-7 cursor-pointer text-muted-foreground hover:text-destructive"
-                                          aria-label="Remover lançamento"
-                                        >
-                                          <Trash2 className="h-3.5 w-3.5" />
-                                        </Button>
-                                      </AlertDialogTrigger>
-                                      <AlertDialogContent>
-                                        <AlertDialogHeader>
-                                          <AlertDialogTitle className="font-heading">
-                                            Remover lançamento
-                                          </AlertDialogTitle>
-                                          <AlertDialogDescription>
-                                            Tem certeza que deseja remover{" "}
-                                            <span className="font-medium">{t.title}</span>? Esta ação
-                                            não pode ser desfeita.
-                                          </AlertDialogDescription>
-                                        </AlertDialogHeader>
-                                        <AlertDialogFooter>
-                                          <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                          <AlertDialogAction
-                                            onClick={() => handleDelete(t.code)}
-                                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                    {/* Remover: se recorrente mostra dialog de escopo, senão AlertDialog padrão */}
+                                    {isRecurring ? (
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-7 w-7 cursor-pointer text-muted-foreground hover:text-destructive"
+                                        aria-label="Remover lançamento"
+                                        onClick={() => initiateDelete(t)}
+                                      >
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                      </Button>
+                                    ) : (
+                                      <AlertDialog>
+                                        <AlertDialogTrigger asChild>
+                                          <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-7 w-7 cursor-pointer text-muted-foreground hover:text-destructive"
+                                            aria-label="Remover lançamento"
                                           >
-                                            Remover
-                                          </AlertDialogAction>
-                                        </AlertDialogFooter>
-                                      </AlertDialogContent>
-                                    </AlertDialog>
+                                            <Trash2 className="h-3.5 w-3.5" />
+                                          </Button>
+                                        </AlertDialogTrigger>
+                                        <AlertDialogContent>
+                                          <AlertDialogHeader>
+                                            <AlertDialogTitle className="font-heading">
+                                              Remover lançamento
+                                            </AlertDialogTitle>
+                                            <AlertDialogDescription>
+                                              Tem certeza que deseja remover{" "}
+                                              <span className="font-medium">{t.title}</span>? Esta ação
+                                              não pode ser desfeita.
+                                            </AlertDialogDescription>
+                                          </AlertDialogHeader>
+                                          <AlertDialogFooter>
+                                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                            <AlertDialogAction
+                                              onClick={() => handleDelete(t.code, "single")}
+                                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                            >
+                                              Remover
+                                            </AlertDialogAction>
+                                          </AlertDialogFooter>
+                                        </AlertDialogContent>
+                                      </AlertDialog>
+                                    )}
                                   </div>
+                                  ) : (
+                                    <span className="text-xs text-muted-foreground/50 italic px-2">Assinatura</span>
+                                  )}
                                 </td>
                               </tr>
                             )
@@ -740,10 +1231,11 @@ export default function LancamentosPage() {
             </div>
           </>
         ) : (
-          <div className="flex flex-col gap-4">
+          /* ── Visualização Anual ──────────────────────────── */
+          <div className="flex flex-col gap-6">
             <div className="flex items-center justify-end">
               <div className="flex items-center gap-2">
-                <Label className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Ano do Planejamento</Label>
+                <Label className="text-sm font-semibold text-muted-foreground">Ano da Visualização</Label>
                 <Select value={String(planningYear)} onValueChange={(v) => setPlanningYear(Number(v))}>
                   <SelectTrigger className="w-[120px] font-heading font-bold cursor-pointer transition-colors">
                     <SelectValue />
@@ -759,73 +1251,67 @@ export default function LancamentosPage() {
               </div>
             </div>
 
-            <Card className="overflow-hidden border-border bg-card">
-              <CardContent className="p-0">
-                {isLoadingPlanning ? (
-                  <div className="p-8 text-center text-muted-foreground flex items-center justify-center">
-                    <Loader2 className="h-6 w-6 animate-spin mr-2" /> Carregando visão anual...
-                  </div>
-                ) : yearlyData.length === 0 ? (
-                  <div className="p-12 text-center text-muted-foreground">
-                    <p>Nenhum dado encontrado para o ano {planningYear}.</p>
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b border-border bg-secondary/20">
-                          <th className="px-4 py-3 text-left font-semibold text-muted-foreground w-[200px]">Categoria</th>
-                          {months.map((m) => (
-                            <th key={m} className="px-4 py-3 text-right font-semibold text-muted-foreground">
-                              {m.substring(0, 3)}
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {yearlyData.map((row) => {
-                          const cat = row.category
-                          const CategoryIcon = getIconComponent(cat?.icon_name ?? "")
-                          return (
-                            <tr
-                              key={cat?.title}
-                              className="group border-b border-border transition-colors hover:bg-secondary/30 last:border-b-0 cursor-pointer"
-                            >
-                              <td className="px-4 py-3">
-                                <div className="flex items-center gap-2">
-                                  <div
-                                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md transition-transform group-hover:scale-110"
-                                    style={{
-                                      backgroundColor: cat ? cat.color + "20" : "var(--secondary)",
-                                      color: cat?.color ?? "var(--muted-foreground)",
-                                    }}
-                                  >
-                                    <CategoryIcon className="h-3 w-3" style={{ color: cat?.color }} />
-                                  </div>
-                                  <span className="font-semibold text-foreground truncate">{cat?.title}</span>
-                                </div>
-                              </td>
-                              {row.months.map((val, idx) => (
-                                <td key={idx} className="px-4 py-3 text-right font-medium">
-                                  {val === 0 ? (
-                                    <span className="text-muted-foreground/30">-</span>
-                                  ) : (
-                                    formatCurrency(val)
-                                  )}
-                                </td>
-                              ))}
-                            </tr>
-                          )
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+            {isLoadingPlanning ? (
+              <div className="p-8 text-center text-muted-foreground flex items-center justify-center">
+                <Loader2 className="h-6 w-6 animate-spin mr-2" /> Carregando visualização anual...
+              </div>
+            ) : (yearlyIncome.length === 0 && yearlyExpense.length === 0) ? (
+              <div className="p-12 text-center text-muted-foreground">
+                <p>Nenhum dado encontrado para o ano {planningYear}.</p>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-6">
+                <Card className="overflow-hidden border-border bg-card">
+                  <CardContent className="p-4">
+                    <AnnualTable
+                      title="Receitas"
+                      rows={yearlyIncome}
+                      planningTransactions={planningTransactions}
+                      formatCurrency={formatCurrency}
+                      onCellClick={(cat, monthIndex) =>
+                        setDrillDown({ open: true, category: cat, monthIndex })
+                      }
+                    />
+                  </CardContent>
+                </Card>
+
+                <Card className="overflow-hidden border-border bg-card">
+                  <CardContent className="p-4">
+                    <AnnualTable
+                      title="Despesas"
+                      rows={yearlyExpense}
+                      planningTransactions={planningTransactions}
+                      formatCurrency={formatCurrency}
+                      onCellClick={(cat, monthIndex) =>
+                        setDrillDown({ open: true, category: cat, monthIndex })
+                      }
+                    />
+                  </CardContent>
+                </Card>
+              </div>
+            )}
           </div>
         )}
       </div>
+
+      {/* ── Drill-Down Modal ──────────────────────────────── */}
+      <DrillDownModal
+        open={drillDown.open}
+        onClose={() => setDrillDown({ open: false, category: null, monthIndex: -1 })}
+        category={drillDown.category}
+        monthIndex={drillDown.monthIndex}
+        transactions={planningTransactions}
+        formatCurrency={formatCurrency}
+      />
+
+      {/* ── Scope Decision Dialog (Recorrências) ─────────── */}
+      <ScopeDialog
+        open={scopeDialog.open}
+        onClose={() => setScopeDialog({ open: false, mode: "delete", transaction: null })}
+        onConfirm={handleScopeConfirm}
+        mode={scopeDialog.mode}
+        transactionTitle={scopeDialog.transaction?.title ?? ""}
+      />
     </div>
   )
 }

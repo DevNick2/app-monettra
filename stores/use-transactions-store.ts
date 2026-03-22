@@ -8,7 +8,9 @@ import { api } from "@/lib/api"
 import type {
   Transaction,
   CreateTransactionPayload,
+  BatchCreateTransactionPayload,
   UpdateTransactionPayload,
+  RecurrenceScope,
 } from "@/lib/types"
 
 interface TransactionsState {
@@ -25,9 +27,10 @@ interface TransactionsActions {
   fetchTransactions: (month?: number, year?: number) => Promise<void>
   fetchPlanningTransactions: (year: number) => Promise<void>
   createTransaction: (data: CreateTransactionPayload) => Promise<void>
+  createBatchTransaction: (data: BatchCreateTransactionPayload) => Promise<void>
   payTransaction: (code: string) => Promise<void>
   updateTransaction: (code: string, data: UpdateTransactionPayload) => Promise<void>
-  deleteTransaction: (code: string) => Promise<void>
+  deleteTransaction: (code: string, scope?: RecurrenceScope) => Promise<void>
   clearError: () => void
 }
 
@@ -83,7 +86,7 @@ export const useTransactionsStore = create<TransactionsStore>((set, get) => ({
     }
   },
 
-  // ── Create ────────────────────────────────────────────────
+  // ── Create (transação única) ──────────────────────────────
   createTransaction: async (data: CreateTransactionPayload) => {
     set({ isLoading: true, error: null })
     try {
@@ -94,6 +97,22 @@ export const useTransactionsStore = create<TransactionsStore>((set, get) => ({
         err && typeof err === "object" && "message" in err
           ? String((err as { message: string }).message)
           : "Erro ao criar lançamento"
+      set({ isLoading: false, error: message })
+      throw err
+    }
+  },
+
+  // ── Create Batch (recorrência server-side — 1 request) ────
+  createBatchTransaction: async (data: BatchCreateTransactionPayload) => {
+    set({ isLoading: true, error: null })
+    try {
+      await api.post("/transactions/batch", data)
+      await get().fetchTransactions()
+    } catch (err: unknown) {
+      const message =
+        err && typeof err === "object" && "message" in err
+          ? String((err as { message: string }).message)
+          : "Erro ao criar lançamentos recorrentes"
       set({ isLoading: false, error: message })
       throw err
     }
@@ -117,7 +136,7 @@ export const useTransactionsStore = create<TransactionsStore>((set, get) => ({
     }
   },
 
-  // ── Update ────────────────────────────────────────────────
+  // ── Update (com suporte a scope de propagação) ────────────
   updateTransaction: async (code: string, data: UpdateTransactionPayload) => {
     set({ isLoading: true, error: null })
     try {
@@ -133,11 +152,11 @@ export const useTransactionsStore = create<TransactionsStore>((set, get) => ({
     }
   },
 
-  // ── Delete ────────────────────────────────────────────────
-  deleteTransaction: async (code: string) => {
+  // ── Delete (com suporte a scope de propagação) ────────────
+  deleteTransaction: async (code: string, scope: RecurrenceScope = "single") => {
     set({ error: null })
     try {
-      await api.delete(`/transactions/${code}`)
+      await api.delete(`/transactions/${code}`, { params: { scope } })
       await get().fetchTransactions()
     } catch (err: unknown) {
       const message =

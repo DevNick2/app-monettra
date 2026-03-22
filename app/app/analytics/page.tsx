@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useEffect, useState } from "react"
-import { BarChart2, PieChart as PieChartIcon, TrendingUp, X, Loader2, Calendar as CalendarIcon } from "lucide-react"
+import { BarChart2, PieChart as PieChartIcon, TrendingUp, X, Loader2, Calendar as CalendarIcon, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { PieChart } from "@mui/x-charts/PieChart"
@@ -9,6 +9,7 @@ import { BarChart } from "@mui/x-charts/BarChart"
 import { LineChart } from "@mui/x-charts/LineChart"
 import { useAnalyticsStore } from "@/stores/use-analytics-store"
 import { useCategoriesStore } from "@/stores/use-categories-store"
+import { useSubscriptionsStore } from "@/stores/use-subscriptions-store"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
@@ -40,6 +41,7 @@ export default function AnalyticsPage() {
   } = useAnalyticsStore()
 
   const { categories, fetchCategories } = useCategoriesStore()
+  const { subscriptions, isLoading: isLoadingSubs, fetchSubscriptions } = useSubscriptionsStore()
   const [catToAdd, setCatToAdd] = useState<string>("")
 
   // Local state para o Calendar Picker (para evitar requisições a cada clique do range)
@@ -56,7 +58,8 @@ export default function AnalyticsPage() {
     fetchAccumulated()
     fetchTrendByCategory()
     fetchCategories()
-  }, [fetchByCategory, fetchAccumulated, fetchTrendByCategory, fetchCategories])
+    fetchSubscriptions()
+  }, [fetchByCategory, fetchAccumulated, fetchTrendByCategory, fetchCategories, fetchSubscriptions])
 
   // Aplicar Range
   const applyDateRange = () => {
@@ -91,6 +94,15 @@ export default function AnalyticsPage() {
       setCatToAdd("")
     }
   }
+
+  // Dados do gráfico de assinaturas (apenas ativas)
+  const activeSubscriptions = subscriptions.filter(s => s.is_active)
+  const subsChartData = activeSubscriptions.map((s, i) => {
+    const valStr = s.amount || "0"
+    const clean = valStr.replace(/\./g, "").replace(",", ".")
+    const val = parseFloat(clean) || 0
+    return { id: i, value: val, label: s.provider }
+  }).sort((a, b) => b.value - a.value)
 
   return (
     <div className="flex flex-col gap-6">
@@ -319,6 +331,38 @@ export default function AnalyticsPage() {
         </Card>
 
       </div>
+
+      {/* GRÁFICO 4: Assinaturas Ativas */}
+      <Card className="border-border bg-card">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-lg font-heading text-foreground">
+            <RefreshCw className="h-5 w-5 text-primary" />
+            Assinaturas Ativas
+          </CardTitle>
+          <CardDescription>
+            Distribuição de custo das assinaturas ativas. Assinaturas desativadas não são contabilizadas.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="min-h-[300px] flex items-center justify-center">
+          {isLoadingSubs ? (
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          ) : subsChartData.length === 0 ? (
+            <div className="text-muted-foreground text-sm flex flex-col items-center gap-2">
+              <RefreshCw className="h-10 w-10 opacity-20" />
+              Nenhuma assinatura ativa cadastrada
+            </div>
+          ) : (
+            <div className="w-full h-[300px]">
+              <BarChart
+                xAxis={[{ scaleType: 'band', data: subsChartData.map(d => d.label), tickLabelStyle: { fill: 'var(--foreground)' } }]}
+                yAxis={[{ tickLabelStyle: { fill: 'var(--foreground)' } }]}
+                series={[{ data: subsChartData.map(d => d.value), color: 'var(--primary)' }]}
+                margin={{ left: 60, bottom: 30 }}
+              />
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   )
 }

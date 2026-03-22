@@ -22,7 +22,13 @@ import {
   Users,
   PawPrint,
   Landmark,
-  BanknoteArrowDown
+  BanknoteArrowDown,
+  Pizza,
+  Handbag,
+  ShoppingBasket,
+  Dumbbell,
+  TvMinimalPlay,
+  CalendarSync
 } from "lucide-react"
 
 import { toast } from "sonner"
@@ -71,6 +77,12 @@ const iconOptions = [
   { name: "PawPrint", icon: PawPrint },
   { name: "Landmark", icon: Landmark },
   { name: "BanknoteArrowDown", icon: BanknoteArrowDown },
+  { name: "Pizza", icon: Pizza },
+  { name: "Handbag", icon: Handbag },
+  { name: "ShoppingBasket", icon: ShoppingBasket },
+  { name: "Dumbbell", icon: Dumbbell },
+  { name: "TvMinimalPlay", icon: TvMinimalPlay },
+  { name: "CalendarSync", icon: CalendarSync },
 ]
 
 // ─── Paleta de cores do design system Monettra ─────────────

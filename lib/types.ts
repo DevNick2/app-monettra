@@ -10,6 +10,7 @@ export interface Transaction {
   title: string
   amount: string
   type: TransactionType
+  type_of_transaction: "default" | "subscription"
   description: string | null
   due_date: string // "DD/MM/YYYY"
   is_paid: boolean
@@ -17,6 +18,7 @@ export interface Transaction {
   updated_at: string
   category: Category
   category_code?: string | null
+  recurrence_id?: string | null // UUID do grupo de recorrência
 }
 
 export interface Category {
@@ -65,6 +67,18 @@ export interface CreateTransactionPayload {
   is_paid?: boolean
 }
 
+export interface BatchCreateTransactionPayload {
+  title: string
+  amount: string
+  type: TransactionType
+  description?: string | null
+  start_date: string // "DD/MM/YYYY" — o backend faz o loop até Dez
+  category_code?: string | null
+  is_paid?: boolean
+}
+
+export type RecurrenceScope = "single" | "forward" | "all"
+
 export interface UpdateTransactionPayload {
   title?: string
   amount?: string
@@ -73,6 +87,7 @@ export interface UpdateTransactionPayload {
   due_date?: string
   category_code?: string | null
   is_paid?: boolean
+  scope?: RecurrenceScope
 }
 
 export interface CreateCategoryPayload {
@@ -144,4 +159,41 @@ export interface PlanningHorizonMonthlyData {
 
 export interface PlanningHorizonResponse {
   horizon: PlanningHorizonMonthlyData[]
+}
+
+// Assinaturas (Subscriptions)
+
+export type RecurrenceType = "monthly" | "yearly" | "biannual" | "quarterly" | "semiannual"
+
+export interface Subscription {
+  code: string
+  provider: string
+  amount: string
+  recurrence: RecurrenceType
+  billing_date: string | null // "DD/MM/YYYY"
+  has_trial: boolean
+  is_active: boolean
+  description: string | null
+  icon_name: string | null
+  created_at: string
+}
+
+export interface CreateSubscriptionPayload {
+  provider: string
+  amount: string
+  recurrence: RecurrenceType
+  billing_date?: string | null // "DD/MM/YYYY"
+  has_trial?: boolean
+  is_active?: boolean
+  description?: string | null
+}
+
+export interface UpdateSubscriptionPayload {
+  provider?: string
+  amount?: string
+  recurrence?: RecurrenceType
+  billing_date?: string | null
+  has_trial?: boolean
+  is_active?: boolean
+  description?: string | null
 }

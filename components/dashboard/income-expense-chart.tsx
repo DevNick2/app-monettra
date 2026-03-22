@@ -59,18 +59,12 @@ export function IncomeExpenseChart() {
           },
         ]}
         borderRadius={4}
-        barGapRatio={0.15}
         width={undefined}
         height={300}
         margin={{ left: 50, right: 20, top: 20, bottom: 30 }}
         slotProps={{
           legend: {
-            direction: "row",
-            position: { vertical: "bottom", horizontal: "middle" },
-            labelStyle: {
-              fontSize: 12,
-              fill: "var(--muted-foreground)",
-            },
+            position: { vertical: "bottom" },
           },
         }}
         sx={{

@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { Landmark, FileText, Tags, User, LogOut, Menu, X, BarChart2, ScrollText } from "lucide-react"
+import { Landmark, FileText, Tags, User, LogOut, Menu, X, BarChart2, ScrollText, Settings, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useState } from "react"
 import { logoutAction } from "@/app/actions/auth"
@@ -11,8 +11,10 @@ const navItems = [
   { href: "/app", label: "Inicio", icon: Landmark },
   { href: "/app/lancamentos", label: "Lancamentos", icon: FileText },
   { href: "/app/analytics", label: "Graficos", icon: BarChart2 },
+  { href: "/app/assinaturas", label: "Assinaturas", icon: RefreshCw },
   { href: "/app/categorias", label: "Categorias", icon: Tags },
   { href: "/app/perfil", label: "Perfil", icon: User },
+  { href: "/app/settings", label: "Configurações", icon: Settings },
 ]
 
 export function AppHeader() {
@@ -45,8 +47,8 @@ export function AppHeader() {
                 key={item.href}
                 href={item.href}
                 className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors ${isActive
-                    ? "bg-primary/10 text-primary font-medium"
-                    : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+                  ? "bg-primary/10 text-primary font-medium"
+                  : "text-muted-foreground hover:bg-secondary hover:text-foreground"
                   }`}
               >
                 <Icon className="h-4 w-4" />
@@ -89,8 +91,8 @@ export function AppHeader() {
                   href={item.href}
                   onClick={() => setMobileMenuOpen(false)}
                   className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors ${isActive
-                      ? "bg-primary/10 text-primary font-medium"
-                      : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+                    ? "bg-primary/10 text-primary font-medium"
+                    : "text-muted-foreground hover:bg-secondary hover:text-foreground"
                     }`}
                 >
                   <Icon className="h-4 w-4" />
