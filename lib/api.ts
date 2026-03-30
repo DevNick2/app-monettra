@@ -7,8 +7,13 @@ import axios, { AxiosError } from "axios"
 
 const TOKEN_KEY = "monettra_token"
 
+/** Base URL pública da API (browser). Defina NEXT_PUBLIC_API_URL no build; padrão dev: localhost:3000. */
+export const PUBLIC_API_URL = (
+  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000"
+).replace(/\/$/, "")
+
 export const api = axios.create({
-  baseURL: "http://localhost:3000",
+  baseURL: PUBLIC_API_URL,
   headers: {
     "Content-Type": "application/json",
   },

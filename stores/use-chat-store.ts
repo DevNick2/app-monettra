@@ -2,7 +2,7 @@
 
 import { generateId } from "ai"
 import { create } from "zustand"
-import { api } from "@/lib/api"
+import { api, PUBLIC_API_URL } from "@/lib/api"
 import type {
   ChatMessage,
   ChatSseEvent,
@@ -138,7 +138,7 @@ async function streamChat(
   }))
 
   try {
-    const response = await fetch(`http://localhost:3000${path}`, {
+    const response = await fetch(`${PUBLIC_API_URL}${path}`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${token}`,
