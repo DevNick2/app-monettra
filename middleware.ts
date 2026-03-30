@@ -33,7 +33,7 @@ export function middleware(request: NextRequest) {
   const authToken =
     request.cookies.get("monettra_auth_token") ||
     // Fallback: cookie legado (simulado) para não quebrar sessões existentes
-    request.cookies.get("babylos-auth-token")
+    request.cookies.get("monettra-auth-token")
 
   if (!authToken) {
     const loginUrl = new URL("/login", request.url)

@@ -28,7 +28,13 @@ import {
   ShoppingBasket,
   Dumbbell,
   TvMinimalPlay,
-  CalendarSync
+  CalendarSync,
+  Handshake,
+  HandCoins,
+  Ribbon,
+  HeartPlus,
+  CreditCard,
+  SmilePlus
 } from "lucide-react"
 
 import { toast } from "sonner"
@@ -83,6 +89,12 @@ const iconOptions = [
   { name: "Dumbbell", icon: Dumbbell },
   { name: "TvMinimalPlay", icon: TvMinimalPlay },
   { name: "CalendarSync", icon: CalendarSync },
+  { name: "Handshake", icon: Handshake },
+  { name: "HandCoins", icon: HandCoins },
+  { name: "Ribbon", icon: Ribbon },
+  { name: "HeartPlus", icon: HeartPlus },
+  { name: "CreditCard", icon: CreditCard },
+  { name: "SmilePlus", icon: SmilePlus },
 ]
 
 // ─── Paleta de cores do design system Monettra ─────────────
@@ -97,6 +109,17 @@ const colorOptions = [
   "#e67e22",
   "#2c3e50",
   "#16a085",
+  "#b03a2e",
+  "#6c3483",
+  "#1f618d",
+  "#117a65",
+  "#d4ac0d",
+  "#ca6f1e",
+  "#873600",
+  "#5499c7",
+  "#af7ac5",
+  "#48c9b0",
+
 ]
 
 function getIconComponent(iconName: string) {

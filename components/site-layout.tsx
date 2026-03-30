@@ -17,7 +17,7 @@ export function SiteHeader() {
         <Link href="/" className="flex items-center gap-2">
           <Landmark className="h-6 w-6 text-primary" />
           <span className="font-heading text-lg font-bold tracking-wide text-foreground">
-            Babylos Finance
+            Monettra Finance
           </span>
         </Link>
 
@@ -54,7 +54,7 @@ export function SiteFooter() {
           <div className="flex items-center gap-2">
             <Landmark className="h-5 w-5 text-primary" />
             <span className="font-heading text-sm font-bold text-foreground">
-              Babylos Finance
+              Monettra Finance
             </span>
           </div>
           <nav className="flex flex-wrap justify-center gap-4">
@@ -69,7 +69,7 @@ export function SiteFooter() {
             ))}
           </nav>
           <p className="text-xs text-muted-foreground">
-            2026 Babylos Finance. Todos os direitos reservados.
+            2026 Monettra Finance. Todos os direitos reservados.
           </p>
         </div>
       </div>

@@ -4,14 +4,15 @@ import React, { useState, useEffect, useMemo, useCallback } from "react"
 import {
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   Plus,
   Loader2,
   Pencil,
   Trash2,
   Home,
   ThumbsUp,
-  ThumbsDown,
   RepeatIcon,
+  CreditCard,
 } from "lucide-react"
 import * as iconOptions from "lucide-react"
 import { toast } from "sonner"
@@ -49,11 +50,16 @@ import { Switch } from "@/components/ui/switch"
 import { cn } from "@/lib/utils"
 import { useTransactionsStore } from "@/stores/use-transactions-store"
 import { useCategoriesStore } from "@/stores/use-categories-store"
+import { useCreditCardsStore } from "@/stores/use-credit-cards-store"
+import { useAccountsStore } from "@/stores/use-accounts-store"
+import { useAuthStore } from "@/stores/use-auth-store"
+import { MemberAvatar } from "@/components/common/member-avatar"
 import type {
   Transaction,
   TransactionType,
   CreateTransactionPayload,
   RecurrenceScope,
+  CreateCreditCardChargePayload,
 } from "@/lib/types"
 
 const months = [
@@ -366,6 +372,9 @@ export default function LancamentosPage() {
   } = useTransactionsStore()
 
   const { categories, fetchCategories } = useCategoriesStore()
+  const { cards, fetchCards, createCharge } = useCreditCardsStore()
+  const { account, fetchMyAccount } = useAccountsStore()
+  const { user } = useAuthStore()
 
   // ─── Dialog states ─────────────────────────────────────────
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -388,6 +397,9 @@ export default function LancamentosPage() {
     monthIndex: number
   }>({ open: false, category: null, monthIndex: -1 })
 
+  // ─── Invoice accordion state ───────────────────────────────
+  const [expandedInvoices, setExpandedInvoices] = useState<Set<string>>(new Set())
+
   // ─── Form states ───────────────────────────────────────────
   const [newTitle, setNewTitle] = useState("")
   const [newDate, setNewDate] = useState(() => buildDefaultDate(new Date().getMonth(), new Date().getFullYear()))
@@ -398,6 +410,12 @@ export default function LancamentosPage() {
   const [newIsPaid, setNewIsPaid] = useState(false)
   // Recorrência
   const [enableRecurrence, setEnableRecurrence] = useState(false)
+  // Cartão de crédito
+  const [useCreditCard, setUseCreditCard] = useState(false)
+  const [selectedCardCode, setSelectedCardCode] = useState("")
+  const [installments, setInstallments] = useState(1)
+  // Dono da transação
+  const [ownerCode, setOwnerCode] = useState("")
 
   // ─── Inicialização ─────────────────────────────────────────
   useEffect(() => {
@@ -470,6 +488,63 @@ export default function LancamentosPage() {
 
   const filteredTransactions = transactions
 
+  // ─── Agrupamento de Faturas (Cartão de Crédito) ─────────────
+  /**
+   * Separa as transações em dois grupos:
+   * 1. regular: transações normais (sem invoice_code)
+   * 2. invoiceGroups: transações de crédito agrupadas por invoice_code
+   */
+  const { regularTransactions, invoiceGroups } = useMemo(() => {
+    const regular: Transaction[] = []
+    const groups = new Map<
+      string,
+      {
+        invoice_code: string
+        month: number
+        year: number
+        card_name: string
+        transactions: Transaction[]
+        total: number
+        is_paid: boolean
+      }
+    >()
+
+    filteredTransactions.forEach((t: Transaction) => {
+      if (t.type_of_transaction === "credit_card" && t.invoice_code) {
+        const key = t.invoice_code
+        if (!groups.has(key)) {
+          groups.set(key, {
+            invoice_code: key,
+            month: t.invoice_reference_month ?? 0,
+            year: t.invoice_reference_year ?? 0,
+            card_name: t.credit_card_name ?? "Cartão",
+            transactions: [],
+            total: 0,
+            is_paid: t.is_paid,
+          })
+        }
+        const g = groups.get(key)!
+        g.transactions.push(t)
+        const amt = parseFloat((t.amount || "0").replace(/\./g, "").replace(",", ".")) || 0
+        g.total += amt
+        if (!t.is_paid) g.is_paid = false
+      } else {
+        regular.push(t)
+      }
+    })
+
+    return { regularTransactions: regular, invoiceGroups: Array.from(groups.values()) }
+  }, [filteredTransactions])
+
+  function toggleInvoice(code: string) {
+    setExpandedInvoices((prev) => {
+      const next = new Set(prev)
+      if (next.has(code)) next.delete(code)
+      else next.add(code)
+      return next
+    })
+  }
+
   // ─── Resumo de Valores ──────────────────────────────────────
   const summary = useMemo(() => {
     let income = 0
@@ -503,8 +578,12 @@ export default function LancamentosPage() {
     setNewDescription("")
     setNewIsPaid(false)
     setEnableRecurrence(false)
+    setUseCreditCard(false)
+    setSelectedCardCode("")
+    setInstallments(1)
+    setOwnerCode(user?.code ?? "")
     setEditingTransaction(null)
-  }, [currentMonth, currentYear, categories])
+  }, [currentMonth, currentYear, categories, user])
 
   function openNewDialog() {
     setNewTitle("")
@@ -515,8 +594,14 @@ export default function LancamentosPage() {
     setNewDescription("")
     setNewIsPaid(false)
     setEnableRecurrence(false)
+    setUseCreditCard(false)
+    setSelectedCardCode("")
+    setInstallments(1)
+    setOwnerCode(user?.code ?? "")
     setEditingTransaction(null)
     fetchCategories()
+    fetchCards()
+    fetchMyAccount()
     setDialogOpen(true)
   }
 
@@ -534,8 +619,10 @@ export default function LancamentosPage() {
     setNewCategoryCode(t.category_code ?? "")
     setNewDescription(t.description ?? "")
     setNewIsPaid(t.is_paid)
+    setOwnerCode(t.owner?.code ?? user?.code ?? "")
     setEnableRecurrence(false)
     fetchCategories()
+    fetchMyAccount()
     setDialogOpen(true)
   }
 
@@ -551,6 +638,7 @@ export default function LancamentosPage() {
       description: newDescription || null,
       category_code: newCategoryCode || null,
       is_paid: newIsPaid,
+      owner_code: ownerCode || null,
     }
   }
 
@@ -561,7 +649,6 @@ export default function LancamentosPage() {
 
     try {
       if (editingTransaction) {
-        // Se é recorrente, pergunta o escopo antes de salvar
         if (editingTransaction.recurrence_id) {
           const payload = buildPayload()
           setScopeDialog({ open: true, mode: "edit", transaction: editingTransaction, pendingPayload: payload })
@@ -570,9 +657,27 @@ export default function LancamentosPage() {
         }
         await updateTransaction(editingTransaction.code, buildPayload())
         toast.success("Lançamento atualizado com sucesso!")
+      } else if (useCreditCard && selectedCardCode) {
+        // Lançamento via cartão de crédito
+        const [yyyy, mm, dd] = newDate.split("-")
+        const chargePayload: CreateCreditCardChargePayload = {
+          title: newTitle,
+          amount: newValue,
+          purchase_date: `${dd}/${mm}/${yyyy}`,
+          credit_card_code: selectedCardCode,
+          installments,
+          description: newDescription || null,
+          category_code: newCategoryCode || null,
+        }
+        await createCharge(chargePayload)
+        toast.success(
+          installments > 1
+            ? `Compra parcelada em ${installments}x registrada com sucesso!`
+            : "Compra no cartão registrada com sucesso!"
+        )
+        fetchTransactions(currentMonth + 1, currentYear)
       } else {
         if (enableRecurrence) {
-          // Usa endpoint batch server-side — 1 único request
           const [yyyy, mm, dd] = newDate.split("-")
           await createBatchTransaction({
             title: newTitle,
@@ -582,6 +687,7 @@ export default function LancamentosPage() {
             description: newDescription || null,
             category_code: newCategoryCode || null,
             is_paid: newIsPaid,
+            owner_code: ownerCode || null,
           })
           toast.success("Lançamentos recorrentes criados com sucesso!")
         } else {
@@ -618,6 +724,7 @@ export default function LancamentosPage() {
           description: newDescription || null,
           category_code: newCategoryCode || null,
           is_paid: newIsPaid,
+          owner_code: ownerCode || null,
         })
       } else {
         await createTransaction(buildPayload())
@@ -752,9 +859,23 @@ export default function LancamentosPage() {
 
             <DialogContent className="sm:max-w-[480px]">
               <DialogHeader>
-                <DialogTitle className="font-heading text-xl">
-                  {editingTransaction ? "Editar Lançamento" : "Novo Lançamento"}
-                </DialogTitle>
+                <div className="flex items-center gap-3">
+                  {editingTransaction?.owner && (
+                    <MemberAvatar
+                      name={editingTransaction.owner.name}
+                      photoUrl={editingTransaction.owner.photo_url}
+                      size="md"
+                    />
+                  )}
+                  <DialogTitle className="font-heading text-xl">
+                    {editingTransaction ? "Editar Lançamento" : "Novo Lançamento"}
+                  </DialogTitle>
+                </div>
+                {editingTransaction?.owner && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Dono: <span className="font-medium text-foreground">{editingTransaction.owner.name}</span>
+                  </p>
+                )}
               </DialogHeader>
 
               <form onSubmit={handleSubmit} className="flex flex-col gap-5 pt-2">
@@ -792,6 +913,82 @@ export default function LancamentosPage() {
                     </Button>
                   </div>
                 </div>
+
+                {/* Bloco Cartão de Crédito (apenas na criação, tipo despesa) */}
+                {!editingTransaction && newType === "expense" && (
+                  <div className="flex flex-col gap-2">
+                    <label
+                      className={`flex items-center gap-3 rounded-lg border px-3 py-2.5 cursor-pointer transition-colors ${
+                        useCreditCard
+                          ? "border-primary/50 bg-primary/5"
+                          : "border-border bg-secondary/20 hover:bg-secondary/30"
+                      }`}
+                      htmlFor="credit-card-switch"
+                    >
+                      <CreditCard className="h-4 w-4 text-muted-foreground shrink-0" />
+                      <div className="flex flex-1 flex-col gap-0.5">
+                        <span className="text-sm font-semibold text-foreground">Cartão de Crédito</span>
+                        <span className="text-xs text-muted-foreground">
+                          Aloca a compra na fatura do cartão
+                        </span>
+                      </div>
+                      <Switch
+                        id="credit-card-switch"
+                        checked={useCreditCard}
+                        onCheckedChange={(v) => {
+                          setUseCreditCard(v)
+                          if (!v) { setSelectedCardCode(""); setInstallments(1) }
+                        }}
+                      />
+                    </label>
+
+                    {useCreditCard && (
+                      <div className="grid grid-cols-2 gap-3 rounded-lg border border-primary/20 bg-primary/5 p-3">
+                        <div className="flex flex-col gap-1.5">
+                          <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                            Cartão
+                          </Label>
+                          {cards.length > 0 ? (
+                            <Select value={selectedCardCode} onValueChange={setSelectedCardCode}>
+                              <SelectTrigger className="h-9">
+                                <SelectValue placeholder="Selecionar cartão" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {cards.map((card) => (
+                                  <SelectItem key={card.code} value={card.code}>
+                                    {card.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          ) : (
+                            <p className="text-xs text-muted-foreground">
+                              Nenhum cartão cadastrado.{" "}
+                              <a href="/cartoes" className="text-primary underline">Cadastrar</a>
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                          <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                            Parcelas
+                          </Label>
+                          <Select value={String(installments)} onValueChange={(v) => setInstallments(Number(v))}>
+                            <SelectTrigger className="h-9">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {Array.from({ length: 24 }, (_, i) => i + 1).map((n) => (
+                                <SelectItem key={n} value={String(n)}>
+                                  {n === 1 ? "À vista (1x)" : `${n}x`}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* 2º Data + Categoria */}
                 <div className="grid grid-cols-2 gap-4">
@@ -918,6 +1115,35 @@ export default function LancamentosPage() {
                     className="flex min-h-[60px] w-full resize-none rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                   />
                 </div>
+
+                {/* Dono da Transação */}
+                {account && account.members.length > 1 && (
+                  <div className="flex flex-col gap-2">
+                    <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      Dono da Transação
+                    </Label>
+                    <Select value={ownerCode} onValueChange={setOwnerCode}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecionar membro" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {account.members
+                          .filter((m) => m.is_accepted)
+                          .map((m) => (
+                            <SelectItem key={m.user_code} value={m.user_code}>
+                              <div className="flex items-center gap-2">
+                                <MemberAvatar name={m.user_name} size="xs" />
+                                <span>{m.user_name}</span>
+                                {m.user_code === user?.code && (
+                                  <span className="text-xs text-muted-foreground">(você)</span>
+                                )}
+                              </div>
+                            </SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
 
                 {/* Recorrência Fixa (apenas na criação) */}
                 {!editingTransaction && (
@@ -1075,11 +1301,97 @@ export default function LancamentosPage() {
                         Adicionar primeiro lançamento
                       </Button>
                     </div>
-                  ) : (
+                  ) : (invoiceGroups.length > 0 || regularTransactions.length > 0) ? (
                     <div className="overflow-x-auto">
                       <table className="w-full">
                         <tbody>
-                          {filteredTransactions.map((t: Transaction) => {
+                          {/* ── Faturas de Cartão (agrupadas) ─────────── */}
+                          {invoiceGroups.map((group) => {
+                            const isExpanded = expandedInvoices.has(group.invoice_code)
+                            const monthNames = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"]
+                            const monthLabel = group.month > 0 ? `${monthNames[group.month - 1]}/${group.year}` : ""
+                            return (
+                              <React.Fragment key={group.invoice_code}>
+                                {/* Linha de cabeçalho da fatura */}
+                                <tr
+                                  className="group border-b border-border bg-primary/5 cursor-pointer hover:bg-primary/10 transition-colors"
+                                  onClick={() => toggleInvoice(group.invoice_code)}
+                                >
+                                  <td className="px-4 py-3 w-16">
+                                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/15">
+                                      <CreditCard className="h-5 w-5 text-primary" />
+                                    </div>
+                                  </td>
+                                  <td className="px-4 py-3">
+                                    <div className="flex items-center gap-2">
+                                      <button className="text-muted-foreground">
+                                        {isExpanded
+                                          ? <ChevronDown className="h-4 w-4" />
+                                          : <ChevronRight className="h-4 w-4" />
+                                        }
+                                      </button>
+                                      <div>
+                                        <span className="text-sm font-semibold text-foreground">
+                                          Fatura {group.card_name}
+                                        </span>
+                                        {monthLabel && (
+                                          <span className="ml-1 text-xs text-muted-foreground">{monthLabel}</span>
+                                        )}
+                                        <div className="text-xs text-muted-foreground">
+                                          {group.transactions.length} compra{group.transactions.length !== 1 ? "s" : ""}
+                                        </div>
+                                      </div>
+                                      {group.is_paid ? (
+                                        <span className="rounded-sm bg-success/10 px-1.5 py-0.5 text-[10px] font-semibold text-success">
+                                          Paga
+                                        </span>
+                                      ) : (
+                                        <span className="rounded-sm bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-amber-600">
+                                          Pendente
+                                        </span>
+                                      )}
+                                    </div>
+                                  </td>
+                                  <td className="px-4 py-3 text-sm text-muted-foreground" />
+                                  <td className="px-4 py-3 text-right text-sm font-bold text-destructive">
+                                    -R$ {group.total.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                                  </td>
+                                  <td colSpan={2} />
+                                </tr>
+
+                                {/* Sub-transações expandidas */}
+                                {isExpanded && group.transactions.map((t) => (
+                                  <tr
+                                    key={t.code}
+                                    className="border-b border-border/50 bg-primary/2 hover:bg-secondary/20 transition-colors"
+                                  >
+                                    <td className="w-16" />
+                                    <td className="px-4 py-2.5 pl-12">
+                                      <span className="text-sm text-foreground">{t.title}</span>
+                                    </td>
+                                    <td className="px-4 py-2.5 text-xs text-muted-foreground">
+                                      {t.due_date}
+                                    </td>
+                                    <td className="px-4 py-2.5 text-right text-sm font-medium text-destructive">
+                                      -R$ {t.amount}
+                                    </td>
+                                    <td className="px-4 py-2.5 text-center">
+                                      <span className={cn(
+                                        "text-xs",
+                                        t.is_paid ? "text-success" : "text-muted-foreground"
+                                      )}>
+                                        {t.is_paid ? "✓" : "–"}
+                                      </span>
+                                    </td>
+                                    <td />
+                                  </tr>
+                                ))}
+                              </React.Fragment>
+                            )
+                          })}
+
+                          {/* ── Transações Regulares ─────────────────────── */}
+                          {regularTransactions.map((t: Transaction) => {
                             const cat = t.category
                             const CategoryIcon = getIconComponent(cat?.icon_name ?? "")
                             const isRecurring = !!t.recurrence_id
@@ -1101,18 +1413,34 @@ export default function LancamentosPage() {
                                   </div>
                                 </td>
 
-                                {/* Título + badge de recorrência */}
+                                {/* Título + badges */}
                                 <td className="px-4 py-4">
                                   <div className="flex items-center gap-2">
+                                    {t.owner && (
+                                      <MemberAvatar
+                                        name={t.owner.name}
+                                        photoUrl={t.owner.photo_url}
+                                        size="xs"
+                                      />
+                                    )}
                                     <span
                                       className="text-sm font-semibold leading-none text-foreground cursor-pointer transition-colors group-hover:text-primary"
-                                      onClick={() => openEditDialog(t)}
+                                      onClick={() => t.type_of_transaction !== "subscription" ? openEditDialog(t) : undefined}
                                     >
                                       {t.title}
                                     </span>
                                     {isRecurring && (
                                       <span title="Lançamento recorrente">
                                         <RepeatIcon className="h-3 w-3 text-muted-foreground/60 shrink-0" />
+                                      </span>
+                                    )}
+                                    {t.type_of_transaction === "subscription" && t.subscription_payment_method === "credit_card" && (
+                                      <span
+                                        className="flex items-center gap-0.5 rounded-sm bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary"
+                                        title="Pago via Cartão de Crédito"
+                                      >
+                                        <CreditCard className="h-2.5 w-2.5" />
+                                        Cartão
                                       </span>
                                     )}
                                   </div>
@@ -1133,7 +1461,7 @@ export default function LancamentosPage() {
                                   {t.type === "income" ? "+" : "-"}R$ {t.amount}
                                 </td>
 
-                                {/* Botão ThumbsUp/ThumbsDown */}
+                                {/* Botão ThumbsUp */}
                                 <td className="px-4 py-4 text-center">
                                   <Button
                                     variant="ghost"
@@ -1157,64 +1485,59 @@ export default function LancamentosPage() {
                                 {/* Ações: editar + remover */}
                                 <td className="px-2 py-4 text-center">
                                   {t.type_of_transaction !== 'subscription' ? (
-                                    <div className="flex items-center gap-1 opacity-100 transition-opacity">
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      onClick={() => openEditDialog(t)}
-                                      className="h-7 w-7 cursor-pointer text-muted-foreground hover:text-foreground"
-                                      aria-label="Editar lançamento"
-                                    >
-                                      <Pencil className="h-3.5 w-3.5" />
-                                    </Button>
-
-                                    {/* Remover: se recorrente mostra dialog de escopo, senão AlertDialog padrão */}
-                                    {isRecurring ? (
+                                    <div className="flex items-center gap-1">
                                       <Button
                                         variant="ghost"
                                         size="icon"
-                                        className="h-7 w-7 cursor-pointer text-muted-foreground hover:text-destructive"
-                                        aria-label="Remover lançamento"
-                                        onClick={() => initiateDelete(t)}
+                                        onClick={() => openEditDialog(t)}
+                                        className="h-7 w-7 cursor-pointer text-muted-foreground hover:text-foreground"
+                                        aria-label="Editar lançamento"
                                       >
-                                        <Trash2 className="h-3.5 w-3.5" />
+                                        <Pencil className="h-3.5 w-3.5" />
                                       </Button>
-                                    ) : (
-                                      <AlertDialog>
-                                        <AlertDialogTrigger asChild>
-                                          <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            className="h-7 w-7 cursor-pointer text-muted-foreground hover:text-destructive"
-                                            aria-label="Remover lançamento"
-                                          >
-                                            <Trash2 className="h-3.5 w-3.5" />
-                                          </Button>
-                                        </AlertDialogTrigger>
-                                        <AlertDialogContent>
-                                          <AlertDialogHeader>
-                                            <AlertDialogTitle className="font-heading">
-                                              Remover lançamento
-                                            </AlertDialogTitle>
-                                            <AlertDialogDescription>
-                                              Tem certeza que deseja remover{" "}
-                                              <span className="font-medium">{t.title}</span>? Esta ação
-                                              não pode ser desfeita.
-                                            </AlertDialogDescription>
-                                          </AlertDialogHeader>
-                                          <AlertDialogFooter>
-                                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                            <AlertDialogAction
-                                              onClick={() => handleDelete(t.code, "single")}
-                                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                      {isRecurring ? (
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-7 w-7 cursor-pointer text-muted-foreground hover:text-destructive"
+                                          onClick={() => initiateDelete(t)}
+                                        >
+                                          <Trash2 className="h-3.5 w-3.5" />
+                                        </Button>
+                                      ) : (
+                                        <AlertDialog>
+                                          <AlertDialogTrigger asChild>
+                                            <Button
+                                              variant="ghost"
+                                              size="icon"
+                                              className="h-7 w-7 cursor-pointer text-muted-foreground hover:text-destructive"
                                             >
-                                              Remover
-                                            </AlertDialogAction>
-                                          </AlertDialogFooter>
-                                        </AlertDialogContent>
-                                      </AlertDialog>
-                                    )}
-                                  </div>
+                                              <Trash2 className="h-3.5 w-3.5" />
+                                            </Button>
+                                          </AlertDialogTrigger>
+                                          <AlertDialogContent>
+                                            <AlertDialogHeader>
+                                              <AlertDialogTitle className="font-heading">
+                                                Remover lançamento
+                                              </AlertDialogTitle>
+                                              <AlertDialogDescription>
+                                                Tem certeza que deseja remover{" "}
+                                                <span className="font-medium">{t.title}</span>?
+                                              </AlertDialogDescription>
+                                            </AlertDialogHeader>
+                                            <AlertDialogFooter>
+                                              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                              <AlertDialogAction
+                                                onClick={() => handleDelete(t.code, "single")}
+                                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                              >
+                                                Remover
+                                              </AlertDialogAction>
+                                            </AlertDialogFooter>
+                                          </AlertDialogContent>
+                                        </AlertDialog>
+                                      )}
+                                    </div>
                                   ) : (
                                     <span className="text-xs text-muted-foreground/50 italic px-2">Assinatura</span>
                                   )}
@@ -1225,7 +1548,7 @@ export default function LancamentosPage() {
                         </tbody>
                       </table>
                     </div>
-                  )}
+                  ) : null}
                 </CardContent>
               </Card>
             </div>

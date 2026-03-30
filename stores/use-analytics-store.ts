@@ -32,7 +32,7 @@ interface AnalyticsStore {
   accumulatedData: AccumulatedData[]
   trendData: TrendData[]
 
-  groupBy: "day" | "week"
+  groupBy: "day" | "week" | "month"
   selectedCategoryIds: string[]
   
   isLoadingCategory: boolean
@@ -44,7 +44,7 @@ interface AnalyticsStore {
   errorTrend: string | null
 
   setDateRange: (range: { from: Date; to: Date }) => void
-  setGroupBy: (groupBy: "day" | "week") => void
+  setGroupBy: (groupBy: "day" | "week" | "month") => void
   addCategoryFilter: (id: string) => void
   removeCategoryFilter: (id: string) => void
   
@@ -68,7 +68,7 @@ export const useAnalyticsStore = create<AnalyticsStore>((set, get) => ({
   accumulatedData: [],
   trendData: [],
 
-  groupBy: "day",
+  groupBy: "month",
   selectedCategoryIds: [], // Deve inicializar vazio
   
   isLoadingCategory: false,
@@ -123,9 +123,18 @@ export const useAnalyticsStore = create<AnalyticsStore>((set, get) => ({
   fetchAccumulated: async () => {
     set({ isLoadingAccumulated: true, errorAccumulated: null })
     try {
-      const { dateRange, groupBy } = get()
-      const startStr = formatDt(dateRange.from, "yyyy-MM-dd")
-      const endStr = formatDt(dateRange.to, "yyyy-MM-dd")
+      const { dateRange, groupBy, currentYear } = get()
+
+      // Para 'month', ignoramos o dateRange do picker e usamos o ano inteiro
+      let startStr: string
+      let endStr: string
+      if (groupBy === "month") {
+        startStr = `${currentYear}-01-01`
+        endStr = `${currentYear}-12-31`
+      } else {
+        startStr = formatDt(dateRange.from, "yyyy-MM-dd")
+        endStr = formatDt(dateRange.to, "yyyy-MM-dd")
+      }
 
       const { data } = await api.get<AccumulatedData[]>("/analytics/accumulated", {
         params: { start_date: startStr, end_date: endStr, group_by: groupBy }

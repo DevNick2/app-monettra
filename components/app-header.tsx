@@ -2,19 +2,21 @@
 
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { Landmark, FileText, Tags, User, LogOut, Menu, X, BarChart2, ScrollText, Settings, RefreshCw } from "lucide-react"
+import { Landmark, FileText, Tags, User, LogOut, Menu, X, BarChart2, ScrollText, Settings, RefreshCw, Users, CreditCard } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useState } from "react"
 import { logoutAction } from "@/app/actions/auth"
 
 const navItems = [
-  { href: "/app", label: "Inicio", icon: Landmark },
-  { href: "/app/lancamentos", label: "Lancamentos", icon: FileText },
-  { href: "/app/analytics", label: "Graficos", icon: BarChart2 },
-  { href: "/app/assinaturas", label: "Assinaturas", icon: RefreshCw },
-  { href: "/app/categorias", label: "Categorias", icon: Tags },
-  { href: "/app/perfil", label: "Perfil", icon: User },
-  { href: "/app/settings", label: "Configurações", icon: Settings },
+  { href: "/", label: "Inicio", icon: Landmark },
+  { href: "/lancamentos", label: "Lancamentos", icon: FileText },
+  { href: "/analytics", label: "Graficos", icon: BarChart2 },
+  { href: "/cartoes", label: "Cartões", icon: CreditCard },
+  { href: "/assinaturas", label: "Assinaturas", icon: RefreshCw },
+  { href: "/categorias", label: "Categorias", icon: Tags },
+  { href: "/conta", label: "Conta", icon: Users },
+  { href: "/perfil", label: "Perfil", icon: User },
+  { href: "/settings", label: "Configurações", icon: Settings },
 ]
 
 export function AppHeader() {
@@ -31,10 +33,10 @@ export function AppHeader() {
   return (
     <header className="sticky top-0 z-50 border-b border-border bg-card/95 backdrop-blur-sm">
       <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4">
-        <Link href="/app" className="flex items-center gap-2">
+        <Link href="/" className="flex items-center gap-2">
           <Landmark className="h-6 w-6 text-primary" />
           <span className="font-heading text-lg font-bold tracking-wide text-foreground">
-            Babylos
+            Monettra
           </span>
         </Link>
 

@@ -13,6 +13,7 @@ import {
   AlertTriangle,
   Clock,
   CheckCircle2,
+  CreditCard,
 } from "lucide-react"
 import {
   SiTwitch,
@@ -22,6 +23,7 @@ import {
   SiApple,
   SiParamountplus,
   SiHbomax,
+  SiGoogle
 } from "@icons-pack/react-simple-icons"
 import { toast } from "sonner"
 import { format, parseISO, differenceInCalendarDays, parse } from "date-fns"
@@ -66,6 +68,7 @@ import { useSubscriptionsStore } from "@/stores/use-subscriptions-store"
 import type {
   Subscription,
   RecurrenceType,
+  SubscriptionPaymentMethod,
   CreateSubscriptionPayload,
   UpdateSubscriptionPayload,
 } from "@/lib/types"
@@ -91,6 +94,7 @@ const ICON_OPTIONS = [
   { name: "Disney+", icon: "" },
   { name: "Paramount+", icon: SiParamountplus },
   { name: "Globoplay", icon: "" },
+  { name: "Google One", icon: SiGoogle },
 ]
 
 // ─── Helpers de data ──────────────────────────────────────────
@@ -191,6 +195,7 @@ export default function AssinaturasPage() {
   const [recurrence, setRecurrence] = useState<RecurrenceType>("monthly")
   const [billingDate, setBillingDate] = useState("") // valor do input[type=date] YYYY-MM-DD
   const [description, setDescription] = useState("")
+  const [paymentMethod, setPaymentMethod] = useState<SubscriptionPaymentMethod>("default")
 
   useEffect(() => {
     fetchSubscriptions()
@@ -228,6 +233,7 @@ export default function AssinaturasPage() {
     setRecurrence("monthly")
     setBillingDate("")
     setDescription("")
+    setPaymentMethod("default")
     setEditingSubscription(null)
   }, [])
 
@@ -241,9 +247,9 @@ export default function AssinaturasPage() {
     setProvider(s.provider)
     setAmount(s.amount)
     setRecurrence(s.recurrence)
-    // billing_date vem como "DD/MM/YYYY" da API, converte para YYYY-MM-DD para o input
     setBillingDate(s.billing_date ? formatInputToIso(s.billing_date) : "")
     setDescription(s.description ?? "")
+    setPaymentMethod(s.payment_method ?? "default")
     setDialogOpen(true)
   }
 
@@ -260,6 +266,7 @@ export default function AssinaturasPage() {
       recurrence,
       billing_date: brDate,
       description: description || null,
+      payment_method: paymentMethod,
     }
   }
 
@@ -469,6 +476,48 @@ export default function AssinaturasPage() {
                   />
                 </div>
 
+                {/* 5.5 Método de Pagamento */}
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod(paymentMethod === "credit_card" ? "default" : "credit_card")}
+                  className={cn(
+                    "flex items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition-all cursor-pointer w-full",
+                    paymentMethod === "credit_card"
+                      ? "border-primary bg-primary/10"
+                      : "border-border bg-secondary/20 hover:bg-secondary/30"
+                  )}
+                >
+                  <CreditCard
+                    className={cn(
+                      "h-4 w-4 shrink-0 transition-colors",
+                      paymentMethod === "credit_card" ? "text-primary" : "text-muted-foreground"
+                    )}
+                  />
+                  <div className="flex flex-1 flex-col gap-0.5">
+                    <span
+                      className={cn(
+                        "text-sm font-semibold",
+                        paymentMethod === "credit_card" ? "text-primary" : "text-foreground"
+                      )}
+                    >
+                      Pago via Cartão de Crédito
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      {paymentMethod === "credit_card"
+                        ? "Os lançamentos serão marcados com badge de cartão"
+                        : "Despesa comum sem vinculação a cartão"}
+                    </span>
+                  </div>
+                  <div
+                    className={cn(
+                      "h-4 w-4 rounded-full border-2 transition-all shrink-0",
+                      paymentMethod === "credit_card"
+                        ? "border-primary bg-primary"
+                        : "border-muted-foreground"
+                    )}
+                  />
+                </button>
+
                 {/* 6. Botões */}
                 <div className="flex gap-2 mt-1">
                   {!editingSubscription && (
@@ -632,9 +681,17 @@ export default function AssinaturasPage() {
                           )}
                         </td>
 
-                        {/* Valor */}
-                        <td className="px-4 py-4 text-right text-sm font-bold text-destructive">
-                          R$ {s.amount}
+                        {/* Valor + badge de cartão */}
+                        <td className="px-4 py-4 text-right">
+                          <div className="flex flex-col items-end gap-1">
+                            <span className="text-sm font-bold text-destructive">R$ {s.amount}</span>
+                            {s.payment_method === "credit_card" && (
+                              <span className="flex items-center gap-1 text-xs text-primary/80 font-medium">
+                                <CreditCard className="h-3 w-3" />
+                                Cartão
+                              </span>
+                            )}
+                          </div>
                         </td>
 
                         {/* Coluna de vencimento */}

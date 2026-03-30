@@ -11,7 +11,7 @@ import { Separator } from "@/components/ui/separator"
 
 export default function PerfilPage() {
   const [name, setName] = useState("Arkad de Babilonia")
-  const [email, setEmail] = useState("arkad@babylos.finance")
+  const [email, setEmail] = useState("arkad@monettra.finance")
   const [phone, setPhone] = useState("(11) 99999-9999")
   const [saved, setSaved] = useState(false)
 

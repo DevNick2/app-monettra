@@ -56,7 +56,7 @@ export default function RecoverAccountPage() {
           <div className="flex items-center gap-2">
             <Landmark className="h-8 w-8 text-primary" />
             <h1 className="font-heading text-2xl font-bold tracking-wide text-foreground">
-              Babylos Finance
+              Monettra Finance
             </h1>
           </div>
           <p className="text-sm text-muted-foreground">

@@ -4,7 +4,7 @@ import { cookies } from "next/headers"
 
 export async function loginAction() {
   const cookieStore = await cookies()
-  cookieStore.set("babylos-auth-token", "authenticated", {
+  cookieStore.set("monettra-auth-token", "authenticated", {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
@@ -15,5 +15,5 @@ export async function loginAction() {
 
 export async function logoutAction() {
   const cookieStore = await cookies()
-  cookieStore.delete("babylos-auth-token")
+  cookieStore.delete("monettra-auth-token")
 }

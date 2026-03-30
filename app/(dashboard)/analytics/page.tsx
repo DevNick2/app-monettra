@@ -1,7 +1,17 @@
 "use client"
 
 import React, { useEffect, useState } from "react"
-import { BarChart2, PieChart as PieChartIcon, TrendingUp, X, Loader2, Calendar as CalendarIcon, RefreshCw } from "lucide-react"
+import {
+  BarChart2,
+  PieChart as PieChartIcon,
+  TrendingUp,
+  X,
+  Loader2,
+  Calendar as CalendarIcon,
+  RefreshCw,
+  LayoutList,
+  Trophy,
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { PieChart } from "@mui/x-charts/PieChart"
@@ -44,7 +54,10 @@ export default function AnalyticsPage() {
   const { subscriptions, isLoading: isLoadingSubs, fetchSubscriptions } = useSubscriptionsStore()
   const [catToAdd, setCatToAdd] = useState<string>("")
 
-  // Local state para o Calendar Picker (para evitar requisições a cada clique do range)
+  // Toggle: "all" = todas categorias, "top5" = apenas top 5
+  const [pieMode, setPieMode] = useState<"all" | "top5">("top5")
+
+  // Local state para o Calendar Picker
   const [localRange, setLocalRange] = useState<{ from?: Date; to?: Date } | undefined>()
 
   useEffect(() => {
@@ -61,28 +74,34 @@ export default function AnalyticsPage() {
     fetchSubscriptions()
   }, [fetchByCategory, fetchAccumulated, fetchTrendByCategory, fetchCategories, fetchSubscriptions])
 
-  // Aplicar Range
   const applyDateRange = () => {
     if (localRange?.from && localRange?.to) {
       setDateRange({ from: localRange.from, to: localRange.to })
     }
   }
 
-  // Prepared data for charts
-  const top5Categories = [...byCategoryData].sort((a, b) => b.total - a.total).slice(0, 5)
-  const pieData = top5Categories.map((d, i) => ({
+  // --- Dados do PieChart ---
+  // Total geral de gastos para calcular percentagem
+  const grandTotal = byCategoryData.reduce((sum, d) => sum + d.total, 0)
+
+  const sortedByCategory = [...byCategoryData].sort((a, b) => b.total - a.total)
+  const displayedCategories = pieMode === "top5" ? sortedByCategory.slice(0, 5) : sortedByCategory
+
+  const pieData = displayedCategories.map((d, i) => ({
     id: i,
-    value: d.total,
+    // Percentagem em relação ao total geral
+    value: grandTotal > 0 ? Math.round((d.total / grandTotal) * 1000) / 10 : 0,
     label: d.category_name,
     color: d.category_color,
   }))
 
-  const barXAxis = accumulatedData.map(d => d.label)
-  const barSeriesData = accumulatedData.map(d => d.total)
+  // --- Dados do BarChart ---
+  const barXAxis = accumulatedData.map((d) => d.label)
+  const barSeriesData = accumulatedData.map((d) => d.total)
 
-  // O chart de linhas com x-axis categórico
-  const lineXAxis = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
-  const lineSeries = trendData.map(d => ({
+  // --- Dados do LineChart de Tendência ---
+  const lineXAxis = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
+  const lineSeries = trendData.map((d) => ({
     data: d.history,
     label: `${d.category_name} (R²: ${(d.r2 * 100).toFixed(0)}%)`,
     color: d.category_color,
@@ -95,28 +114,31 @@ export default function AnalyticsPage() {
     }
   }
 
-  // Dados do gráfico de assinaturas (apenas ativas)
-  const activeSubscriptions = subscriptions.filter(s => s.is_active)
-  const subsChartData = activeSubscriptions.map((s, i) => {
-    const valStr = s.amount || "0"
-    const clean = valStr.replace(/\./g, "").replace(",", ".")
-    const val = parseFloat(clean) || 0
-    return { id: i, value: val, label: s.provider }
-  }).sort((a, b) => b.value - a.value)
+  // --- Dados do gráfico de assinaturas ---
+  const activeSubscriptions = subscriptions.filter((s) => s.is_active)
+  const subsChartData = activeSubscriptions
+    .map((s, i) => {
+      const valStr = s.amount || "0"
+      const clean = valStr.replace(/\./g, "").replace(",", ".")
+      const val = parseFloat(clean) || 0
+      return { id: i, value: val, label: s.provider }
+    })
+    .sort((a, b) => b.value - a.value)
 
   return (
     <div className="flex flex-col gap-6">
+      {/* Cabeçalho */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="font-heading text-2xl font-bold text-foreground flex items-center gap-2">
           <BarChart2 className="h-6 w-6 text-primary" />
           Gráficos e Relatórios
         </h1>
-        
+
         <div className="flex items-center gap-2">
           <Popover>
             <PopoverTrigger asChild>
               <Button
-                id="date"
+                id="date-range-picker"
                 variant={"outline"}
                 className={cn(
                   "w-[260px] justify-start text-left font-normal cursor-pointer bg-card hover:bg-card/80",
@@ -127,7 +149,7 @@ export default function AnalyticsPage() {
                 {localRange?.from ? (
                   localRange.to ? (
                     <>
-                      {formatDt(localRange.from, "dd MMM", { locale: ptBR })} -{" "}
+                      {formatDt(localRange.from, "dd MMM", { locale: ptBR })} —{" "}
                       {formatDt(localRange.to, "dd MMM", { locale: ptBR })}
                     </>
                   ) : (
@@ -149,7 +171,12 @@ export default function AnalyticsPage() {
                 locale={ptBR}
               />
               <div className="p-3 border-t border-border flex justify-end">
-                <Button size="sm" onClick={applyDateRange} disabled={!localRange?.from || !localRange?.to}>
+                <Button
+                  id="apply-date-range"
+                  size="sm"
+                  onClick={applyDateRange}
+                  disabled={!localRange?.from || !localRange?.to}
+                >
                   Aplicar
                 </Button>
               </div>
@@ -158,9 +185,9 @@ export default function AnalyticsPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 lg:grid-rows-[auto,auto] gap-6">
-        
-        {/* GRÁFICO 1: Distribuição por Categoria (Pie) */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+        {/* GRÁFICO 1: Distribuição por Categoria (PieChart com % e toggle) */}
         <Card className="border-border bg-card lg:col-span-1">
           <CardHeader>
             <CardTitle className="flex items-center justify-between text-lg font-heading text-foreground">
@@ -168,9 +195,42 @@ export default function AnalyticsPage() {
                 <PieChartIcon className="h-5 w-5 text-primary" />
                 Gastos por Categoria
               </span>
+              {/* Toggle: Todos / Top 5 */}
+              <div className="flex rounded-lg bg-secondary/50 p-1">
+                <button
+                  id="pie-toggle-top5"
+                  onClick={() => setPieMode("top5")}
+                  className={cn(
+                    "flex items-center gap-1.5 h-7 px-3 text-xs font-semibold rounded-md cursor-pointer transition-colors",
+                    pieMode === "top5"
+                      ? "bg-background shadow-sm text-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  <Trophy className="h-3.5 w-3.5" />
+                  Top 5
+                </button>
+                <button
+                  id="pie-toggle-all"
+                  onClick={() => setPieMode("all")}
+                  className={cn(
+                    "flex items-center gap-1.5 h-7 px-3 text-xs font-semibold rounded-md cursor-pointer transition-colors",
+                    pieMode === "all"
+                      ? "bg-background shadow-sm text-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  <LayoutList className="h-3.5 w-3.5" />
+                  Todas
+                </button>
+              </div>
             </CardTitle>
-            <CardDescription className="flex items-center gap-2">
-              <span className="text-xs italic bg-secondary text-secondary-foreground px-2 py-0.5 rounded-full">Exibindo as 5 categorias de maior gasto</span>
+            <CardDescription>
+              <span className="text-xs italic bg-secondary text-secondary-foreground px-2 py-0.5 rounded-full">
+                {pieMode === "top5"
+                  ? "Percentagem das 5 categorias de maior gasto"
+                  : `Percentagem de todas as ${sortedByCategory.length} categorias`}
+              </span>
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col items-center justify-center min-h-[300px]">
@@ -186,7 +246,15 @@ export default function AnalyticsPage() {
             ) : (
               <div className="w-full h-[300px] max-w-lg">
                 <PieChart
-                  series={[{ data: pieData, innerRadius: 30, paddingAngle: 5, cornerRadius: 5 }]}
+                  series={[
+                    {
+                      data: pieData,
+                      innerRadius: 30,
+                      paddingAngle: 5,
+                      cornerRadius: 5,
+                      valueFormatter: (v) => `${v.value}%`,
+                    },
+                  ]}
                   margin={{ right: 5 }}
                 />
               </div>
@@ -194,7 +262,7 @@ export default function AnalyticsPage() {
           </CardContent>
         </Card>
 
-        {/* GRÁFICO 2: Acumulado do Mês (Bar) */}
+        {/* GRÁFICO 2: Acumulado do Período (Bar) com toggle Dia/Semana/Mensal */}
         <Card className="border-border bg-card lg:col-span-1">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <div>
@@ -202,28 +270,30 @@ export default function AnalyticsPage() {
                 <BarChart2 className="h-5 w-5 text-primary" />
                 Acumulado do Período
               </CardTitle>
-              <CardDescription>
-                Evolução dos gastos ao longo do tempo.
-              </CardDescription>
+              <CardDescription>Evolução dos gastos ao longo do tempo.</CardDescription>
             </div>
-            
+
             <div className="flex rounded-lg bg-secondary/50 p-1">
-              <Button
-                variant="ghost"
-                size="sm"
-                className={cn("h-7 px-3 text-xs font-semibold cursor-pointer transition-colors", groupBy === "day" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground")}
-                onClick={() => setGroupBy("day")}
-              >
-                Dia
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className={cn("h-7 px-3 text-xs font-semibold cursor-pointer transition-colors", groupBy === "week" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground")}
-                onClick={() => setGroupBy("week")}
-              >
-                Semana
-              </Button>
+              {(["day", "week", "month"] as const).map((key) => {
+                const labels = { day: "Dia", week: "Semana", month: "Mensal" }
+                return (
+                  <Button
+                    key={key}
+                    id={`group-by-${key}`}
+                    variant="ghost"
+                    size="sm"
+                    className={cn(
+                      "h-7 px-3 text-xs font-semibold cursor-pointer transition-colors",
+                      groupBy === key
+                        ? "bg-background shadow-sm text-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                    onClick={() => setGroupBy(key)}
+                  >
+                    {labels[key]}
+                  </Button>
+                )
+              })}
             </div>
           </CardHeader>
           <CardContent className="min-h-[300px] flex items-center justify-center">
@@ -239,9 +309,9 @@ export default function AnalyticsPage() {
             ) : (
               <div className="w-full h-[300px]">
                 <BarChart
-                  xAxis={[{ scaleType: 'band', data: barXAxis, tickLabelStyle: { fill: 'var(--foreground)' } }]}
-                  yAxis={[{ tickLabelStyle: { fill: 'var(--foreground)' } }]}
-                  series={[{ data: barSeriesData, color: 'var(--primary)' }]}
+                  xAxis={[{ scaleType: "band", data: barXAxis, tickLabelStyle: { fill: "var(--foreground)" } }]}
+                  yAxis={[{ tickLabelStyle: { fill: "var(--foreground)" } }]}
+                  series={[{ data: barSeriesData, color: "var(--primary)", valueFormatter: (v) => v !== null ? `R$ ${v?.toFixed(2).replace(".", ",")}` : "" }]}
                   margin={{ left: 60, bottom: 30 }}
                 />
               </div>
@@ -257,38 +327,55 @@ export default function AnalyticsPage() {
               Tendência por Categoria
             </CardTitle>
             <CardDescription className="flex flex-col gap-1">
-              <span>Evolução das despesas ao longo dos 12 meses do ano e projeção em linha de tendência usando Mínimos Quadrados.</span>
+              <span>
+                Evolução das despesas ao longo dos 12 meses do ano e projeção em linha de tendência usando Mínimos Quadrados.
+              </span>
               <span className="text-xs italic bg-secondary/50 p-1 rounded w-fit">
                 Baseado no Ano Atual e isolado de outros filtros. (R² mede a previsibilidade de 0% a 100%)
               </span>
             </CardDescription>
-            
+
             <div className="mt-4 flex flex-col gap-3">
               <div className="flex items-center gap-2 max-w-sm">
                 <Select value={catToAdd} onValueChange={setCatToAdd}>
-                  <SelectTrigger className="flex-1 bg-background">
+                  <SelectTrigger id="trend-category-select" className="flex-1 bg-background">
                     <SelectValue placeholder="Selecione uma categoria para visualizar..." />
                   </SelectTrigger>
                   <SelectContent>
                     {categories.map((c) => (
-                      <SelectItem key={c.code} value={c.code}>{c.title}</SelectItem>
+                      <SelectItem key={c.code} value={c.code}>
+                        {c.title}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-                <Button variant="secondary" onClick={handleAddCategory} disabled={!catToAdd} className="cursor-pointer">
+                <Button
+                  id="trend-category-add"
+                  variant="secondary"
+                  onClick={handleAddCategory}
+                  disabled={!catToAdd}
+                  className="cursor-pointer"
+                >
                   Visualizar
                 </Button>
               </div>
-              
+
               {selectedCategoryIds.length > 0 && (
                 <div className="flex flex-wrap gap-2 mt-2">
-                  {selectedCategoryIds.map(id => {
-                    const cat = categories.find(c => c.code === id)
+                  {selectedCategoryIds.map((id) => {
+                    const cat = categories.find((c) => c.code === id)
                     if (!cat) return null
                     return (
-                      <div key={id} className="flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold" style={{ backgroundColor: cat.color + '20', color: cat.color }}>
+                      <div
+                        key={id}
+                        className="flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold"
+                        style={{ backgroundColor: cat.color + "20", color: cat.color }}
+                      >
                         {cat.title}
-                        <button onClick={() => removeCategoryFilter(id)} className="ml-1 rounded-full p-0.5 hover:bg-black/10 cursor-pointer transition-colors">
+                        <button
+                          onClick={() => removeCategoryFilter(id)}
+                          className="ml-1 rounded-full p-0.5 hover:bg-black/10 cursor-pointer transition-colors"
+                        >
                           <X className="h-3 w-3" />
                         </button>
                       </div>
@@ -304,14 +391,13 @@ export default function AnalyticsPage() {
             ) : errorTrend ? (
               <div className="text-destructive text-sm font-semibold">{errorTrend}</div>
             ) : selectedCategoryIds.length === 0 ? (
-               <div className="text-muted-foreground text-sm flex flex-col items-center gap-3 bg-secondary/20 p-8 rounded-xl border border-dashed border-border w-full max-w-md">
-                 <Select value="" onValueChange={() => {}}>
-                   <SelectTrigger className="w-0 h-0 opacity-0 absolute"></SelectTrigger>
-                 </Select>
-                 <TrendingUp className="h-12 w-12 text-primary/40" />
-                 <p className="text-center font-medium">Nenhuma categoria selecionada</p>
-                 <p className="text-center text-xs opacity-70">Adicione categorias no filtro acima para visualizar a linha de tendência (OLS) do ano atual.</p>
-               </div>
+              <div className="text-muted-foreground text-sm flex flex-col items-center gap-3 bg-secondary/20 p-8 rounded-xl border border-dashed border-border w-full max-w-md">
+                <TrendingUp className="h-12 w-12 text-primary/40" />
+                <p className="text-center font-medium">Nenhuma categoria selecionada</p>
+                <p className="text-center text-xs opacity-70">
+                  Adicione categorias no filtro acima para visualizar a linha de tendência (OLS) do ano atual.
+                </p>
+              </div>
             ) : lineSeries.length === 0 ? (
               <div className="text-muted-foreground text-sm flex flex-col items-center gap-2">
                 <TrendingUp className="h-10 w-10 opacity-20" />
@@ -320,8 +406,8 @@ export default function AnalyticsPage() {
             ) : (
               <div className="w-full h-[300px]">
                 <LineChart
-                  xAxis={[{ scaleType: 'point', data: lineXAxis, tickLabelStyle: { fill: 'var(--foreground)' } }]}
-                  yAxis={[{ tickLabelStyle: { fill: 'var(--foreground)' } }]}
+                  xAxis={[{ scaleType: "point", data: lineXAxis, tickLabelStyle: { fill: "var(--foreground)" } }]}
+                  yAxis={[{ tickLabelStyle: { fill: "var(--foreground)" } }]}
                   series={lineSeries}
                   margin={{ left: 60, bottom: 30 }}
                 />
@@ -329,7 +415,6 @@ export default function AnalyticsPage() {
             )}
           </CardContent>
         </Card>
-
       </div>
 
       {/* GRÁFICO 4: Assinaturas Ativas */}
@@ -354,9 +439,15 @@ export default function AnalyticsPage() {
           ) : (
             <div className="w-full h-[300px]">
               <BarChart
-                xAxis={[{ scaleType: 'band', data: subsChartData.map(d => d.label), tickLabelStyle: { fill: 'var(--foreground)' } }]}
-                yAxis={[{ tickLabelStyle: { fill: 'var(--foreground)' } }]}
-                series={[{ data: subsChartData.map(d => d.value), color: 'var(--primary)' }]}
+                xAxis={[
+                  {
+                    scaleType: "band",
+                    data: subsChartData.map((d) => d.label),
+                    tickLabelStyle: { fill: "var(--foreground)" },
+                  },
+                ]}
+                yAxis={[{ tickLabelStyle: { fill: "var(--foreground)" } }]}
+                series={[{ data: subsChartData.map((d) => d.value), color: "var(--primary)" }]}
                 margin={{ left: 60, bottom: 30 }}
               />
             </div>
