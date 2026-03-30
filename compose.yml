@@ -1,0 +1,37 @@
+services:
+  web-dev:
+    profiles: ["dev"]
+    container_name: monettra-web-dev
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env.development
+    volumes:
+      - .:/app
+      - web_node_modules:/app/node_modules
+      - web_next:/app/.next
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: >
+      sh -c "pnpm install && pnpm exec next dev -p 8080 -H 0.0.0.0"
+    restart: unless-stopped
+
+  web:
+    profiles: ["prod"]
+    container_name: monettra-web
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+        NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${NEXT_PUBLIC_GOOGLE_CLIENT_ID}
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+
+volumes:
+  web_node_modules:
+  web_next:

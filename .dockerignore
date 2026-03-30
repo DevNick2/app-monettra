@@ -1,0 +1,10 @@
+node_modules
+.next
+.git
+*.md
+.env
+.env.production
+.env*.local
+Dockerfile*
+compose.yml
+Makefile

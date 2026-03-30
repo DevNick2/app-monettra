@@ -1,0 +1,5 @@
+# Desenvolvimento — Node + pnpm (código montado por volume no compose)
+FROM node:22-alpine
+RUN corepack enable && corepack prepare pnpm@9 --activate
+WORKDIR /app
+EXPOSE 8080
