@@ -19,5 +19,5 @@ stop:
 	docker compose down
 
 # Logs (todos os serviços do compose neste diretório)
-watch:
-	docker compose logs -f
+watch-dev:
+	docker compose --profile dev logs -f
