@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import { PieChart } from "@mui/x-charts/PieChart"
 
 const data = [
@@ -12,6 +13,20 @@ const data = [
 ]
 
 export function CategoryDonutChart() {
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  if (!mounted) {
+    return (
+      <div className="h-[300px] w-full flex items-center justify-center">
+        <div className="h-[280px] w-[300px] max-w-full rounded-lg bg-muted/40 animate-pulse" aria-hidden />
+      </div>
+    )
+  }
+
   return (
     <div className="h-[300px] w-full flex items-center justify-center">
       <PieChart
@@ -31,11 +46,13 @@ export function CategoryDonutChart() {
         height={280}
         slotProps={{
           legend: {
-            direction: "column",
-            position: { vertical: "middle", horizontal: "right" },
-            labelStyle: {
-              fontSize: 11,
-              fill: "var(--muted-foreground)",
+            direction: "vertical",
+            position: { vertical: "middle", horizontal: "end" },
+            sx: {
+              "& .MuiChartsLegend-label": {
+                fontSize: 11,
+                fill: "var(--muted-foreground)",
+              },
             },
           },
         }}
