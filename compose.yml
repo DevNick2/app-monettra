@@ -30,6 +30,8 @@ services:
         NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${NEXT_PUBLIC_GOOGLE_CLIENT_ID}
     ports:
       - "8080:8080"
+    env_file:
+      - .env.production
     restart: unless-stopped
     labels:
       - traefik.enable=true
