@@ -3,7 +3,6 @@ import type { NextRequest } from "next/server"
 
 // Rotas públicas — não exigem autenticação
 const publicRoutes = [
-  "/",
   "/login",
   "/recuperar-conta",
   "/sobre",
@@ -15,7 +14,6 @@ const publicRoutes = [
 
 function isPublicRoute(pathname: string): boolean {
   return publicRoutes.some((route) => {
-    if (route === "/") return pathname === "/"
     return pathname === route || pathname.startsWith(route + "/")
   })
 }

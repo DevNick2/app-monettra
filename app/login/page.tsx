@@ -1,7 +1,6 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Eye, EyeOff, Landmark } from "lucide-react"
 import { toast } from "sonner"
@@ -230,12 +229,6 @@ export default function LoginPage() {
               {googleLoading ? "Autenticando..." : "Entrar com Google"}
             </Button>
 
-            <p className="mt-6 text-center text-sm text-muted-foreground">
-              {"Não tem uma conta? "}
-              <Link href="/" className="text-primary hover:underline">
-                Conheça nossos planos
-              </Link>
-            </p>
           </CardContent>
         </Card>
       </div>
