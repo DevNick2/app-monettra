@@ -38,7 +38,7 @@ services:
       - traefik.http.routers.web.rule=Host(`web.${TRAEFIK_HOST}`)
       - traefik.http.routers.web.entrypoints=websecure
       - traefik.http.routers.web.tls.certresolver=letsencrypt
-      - traefik.http.services.web.loadbalancer.server.port=3001
+      - traefik.http.services.web.loadbalancer.server.port=8080
 
 networks:
   traefik-proxy:
