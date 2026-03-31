@@ -37,7 +37,7 @@ export const useSubscriptionsStore = create<SubscriptionsStore>((set, get) => ({
   fetchSubscriptions: async () => {
     set({ isLoading: true, error: null })
     try {
-      const { data } = await api.get<Subscription[]>("/subscriptions")
+      const { data } = await api.get<Subscription[]>("/subscriptions/")
       set({ subscriptions: data, isLoading: false })
     } catch (err: unknown) {
       const message =
@@ -52,7 +52,7 @@ export const useSubscriptionsStore = create<SubscriptionsStore>((set, get) => ({
   createSubscription: async (data: CreateSubscriptionPayload) => {
     set({ isLoading: true, error: null })
     try {
-      await api.post("/subscriptions", data)
+      await api.post("/subscriptions/", data)
       await get().fetchSubscriptions()
     } catch (err: unknown) {
       const message =

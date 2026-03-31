@@ -55,7 +55,7 @@ export const useTransactionsStore = create<TransactionsStore>((set, get) => ({
 
     set({ isLoading: true, error: null, activeMonth: m ?? null, activeYear: y ?? null })
     try {
-      const { data } = await api.get<Transaction[]>("/transactions", { params })
+      const { data } = await api.get<Transaction[]>("/transactions/", { params })
       set({ transactions: data, isLoading: false })
     } catch (err: unknown) {
       const message =
@@ -90,7 +90,7 @@ export const useTransactionsStore = create<TransactionsStore>((set, get) => ({
   createTransaction: async (data: CreateTransactionPayload) => {
     set({ isLoading: true, error: null })
     try {
-      await api.post("/transactions", data)
+      await api.post("/transactions/", data)
       await get().fetchTransactions()
     } catch (err: unknown) {
       const message =

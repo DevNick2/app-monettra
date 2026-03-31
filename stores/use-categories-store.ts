@@ -36,7 +36,7 @@ export const useCategoriesStore = create<CategoriesStore>((set, get) => ({
   fetchCategories: async () => {
     set({ isLoading: true, error: null })
     try {
-      const { data } = await api.get<Category[]>("/categories")
+      const { data } = await api.get<Category[]>("/categories/")
       set({ categories: data, isLoading: false })
     } catch (err: unknown) {
       const message =
@@ -51,7 +51,7 @@ export const useCategoriesStore = create<CategoriesStore>((set, get) => ({
   createCategory: async (data: CreateCategoryPayload) => {
     set({ isLoading: true, error: null })
     try {
-      await api.post("/categories", data)
+      await api.post("/categories/", data)
       await get().fetchCategories()
     } catch (err: unknown) {
       const message =
