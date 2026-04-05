@@ -3,6 +3,7 @@
 import { useEffect } from "react"
 import { TrendingUp, TrendingDown, Wallet } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Separator } from "@/components/ui/separator"
 import { IncomeExpenseChart } from "@/components/dashboard/income-expense-chart"
 import { CategoryDonutChart } from "@/components/dashboard/category-donut-chart"
 import { useTransactionsStore } from "@/stores/use-transactions-store"
@@ -26,6 +27,17 @@ export default function DashboardPage() {
   const totalIncome = summary?.total_income ?? 0
   const totalExpense = summary?.total_expense ?? 0
   const netBalance = summary?.net_balance ?? 0
+  const paidNetBalance = summary?.paid_net_balance ?? 0
+
+  const paidColorClass = isLoadingSummary
+    ? "text-muted-foreground/50 animate-pulse"
+    : paidNetBalance === 0
+    ? "text-foreground"
+    : paidNetBalance > 0
+    ? "text-success"
+    : "text-destructive"
+
+  const paidSignal = paidNetBalance === 0 ? "zero" : paidNetBalance > 0 ? "positivo" : "negativo"
 
   return (
     <div className="flex flex-col gap-6">
@@ -39,6 +51,7 @@ export default function DashboardPage() {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3">
+        {/* Entradas */}
         <Card className="border-border bg-card">
           <CardContent className="flex items-center gap-4 p-4">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-success/10">
@@ -53,6 +66,7 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
+        {/* Saídas */}
         <Card className="border-border bg-card">
           <CardContent className="flex items-center gap-4 p-4">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-destructive/10">
@@ -67,23 +81,43 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
+        {/* Saldo — mesclado (Geral | Realizado) */}
         <Card className="border-border bg-card">
-          <CardContent className="flex items-center gap-4 p-4">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-              <Wallet className="h-5 w-5 text-primary" />
-            </div>
-            <div>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+                <Wallet className="h-5 w-5 text-primary" />
+              </div>
               <p className="text-xs text-muted-foreground">Saldo do Mês</p>
-              <p className={cn(
-                "text-lg font-bold",
-                isLoadingSummary
-                  ? "text-muted-foreground/50 animate-pulse"
-                  : netBalance >= 0
-                  ? "text-foreground"
-                  : "text-destructive"
-              )}>
-                {formatCurrency(netBalance)}
-              </p>
+            </div>
+            <div className="flex items-stretch gap-4">
+              {/* Saldo Geral — opacidade reduzida */}
+              <div className="flex-1 opacity-90">
+                <p className="text-xs text-muted-foreground mb-0.5">Geral</p>
+                <p className={cn(
+                  "text-lg font-bold",
+                  isLoadingSummary
+                    ? "text-muted-foreground/50 animate-pulse"
+                    : netBalance >= 0
+                    ? "text-foreground"
+                    : "text-destructive"
+                )}>
+                  {formatCurrency(netBalance)}
+                </p>
+              </div>
+
+              <Separator orientation="vertical" className="self-stretch" />
+
+              {/* Saldo Realizado — cor condicional */}
+              <div className="flex-1">
+                <p className="text-xs text-muted-foreground mb-0.5">Realizado</p>
+                <p
+                  className={cn("text-lg font-bold", paidColorClass)}
+                  aria-label={`Saldo realizado: ${formatCurrency(paidNetBalance)}, ${paidSignal}`}
+                >
+                  {formatCurrency(paidNetBalance)}
+                </p>
+              </div>
             </div>
           </CardContent>
         </Card>

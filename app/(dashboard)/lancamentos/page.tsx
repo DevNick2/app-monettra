@@ -48,6 +48,7 @@ import {
 } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { cn } from "@/lib/utils"
+import { Separator } from "@/components/ui/separator"
 import { useTransactionsStore } from "@/stores/use-transactions-store"
 import { useCategoriesStore } from "@/stores/use-categories-store"
 import { useCreditCardsStore } from "@/stores/use-credit-cards-store"
@@ -1250,108 +1251,89 @@ export default function LancamentosPage() {
             </div>
 
             {/* Resumos */}
-            <div className="flex flex-col gap-3">
-              {/* Linha 1 — saldos gerais (todas as transações) */}
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                <Card className="border-border bg-card">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
-                      Saldo Geral
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className={cn(
-                      "text-2xl font-bold",
-                      (apiSummary?.net_balance ?? summary.balance * 100) >= 0
-                        ? "text-foreground"
-                        : "text-destructive"
-                    )}>
-                      {apiSummary
-                        ? formatCurrency(apiSummary.net_balance / 100)
-                        : formatCurrency(summary.balance)}
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+              {/* Card 1 — Saldo Geral | Realizado */}
+              <Card className="border-border bg-card">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
+                    Saldo
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-stretch gap-4">
+                    {/* Saldo Geral — destaque reduzido */}
+                    <div className="flex-1 opacity-90">
+                      <p className="text-sm text-muted-foreground mb-0.5">Geral</p>
+                      <div className={cn(
+                        "text-2xl opacity-80",
+                        (apiSummary?.net_balance ?? summary.balance * 100) >= 0
+                          ? "text-foreground"
+                          : "text-destructive"
+                      )}>
+                        {apiSummary
+                          ? formatCurrency(apiSummary.net_balance / 100)
+                          : formatCurrency(summary.balance)}
+                      </div>
                     </div>
-                  </CardContent>
-                </Card>
-                <Card className="border-border bg-card">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
-                      Receitas
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold text-success">
-                      {apiSummary
-                        ? formatCurrency(apiSummary.total_income / 100)
-                        : formatCurrency(summary.income)}
-                    </div>
-                  </CardContent>
-                </Card>
-                <Card className="border-border bg-card">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
-                      Despesas
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold text-destructive">
-                      {apiSummary
-                        ? formatCurrency(apiSummary.total_expense / 100)
-                        : formatCurrency(summary.expense)}
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
 
-              {/* Linha 2 — saldos pagos (is_paid = true) */}
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                <Card className="border-border bg-card/60">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70">
-                      Saldo Pago
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className={cn(
-                      "text-lg font-semibold",
-                      (apiSummary?.paid_net_balance ?? 0) >= 0
-                        ? "text-foreground/80"
-                        : "text-destructive/80"
-                    )}>
-                      {apiSummary
-                        ? formatCurrency(apiSummary.paid_net_balance / 100)
-                        : "—"}
+                    <Separator orientation="vertical" className="self-stretch" />
+
+                    {/* Saldo Realizado — destaque pleno com cor condicional */}
+                    <div className="flex-1">
+                      <p className="text-sm text-muted-foreground mb-0.5">Realizado</p>
+                      {(() => {
+                        const paid = apiSummary?.paid_net_balance ?? 0
+                        const colorClass = paid === 0
+                          ? "text-foreground"
+                          : paid > 0
+                          ? "text-success"
+                          : "text-destructive"
+                        const signal = paid === 0 ? "zero" : paid > 0 ? "positivo" : "negativo"
+                        return (
+                          <div
+                            className={cn("text-2xl font-bold", colorClass)}
+                            aria-label={`Saldo realizado: ${apiSummary ? formatCurrency(paid / 100) : "—"}, ${signal}`}
+                          >
+                            {apiSummary ? formatCurrency(paid / 100) : "—"}
+                          </div>
+                        )
+                      })()}
                     </div>
-                  </CardContent>
-                </Card>
-                <Card className="border-border bg-card/60">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70">
-                      Recebidas
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-lg font-semibold text-success/80">
-                      {apiSummary
-                        ? formatCurrency(apiSummary.paid_income / 100)
-                        : "—"}
-                    </div>
-                  </CardContent>
-                </Card>
-                <Card className="border-border bg-card/60">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70">
-                      Pagas
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-lg font-semibold text-destructive/80">
-                      {apiSummary
-                        ? formatCurrency(apiSummary.paid_expense / 100)
-                        : "—"}
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Card 2 — Receitas */}
+              <Card className="border-border bg-card">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
+                    Receitas
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-success">
+                    {apiSummary
+                      ? formatCurrency(apiSummary.total_income / 100)
+                      : formatCurrency(summary.income)}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Card 3 — Despesas */}
+              <Card className="border-border bg-card">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
+                    Despesas
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-destructive">
+                    {apiSummary
+                      ? formatCurrency(apiSummary.total_expense / 100)
+                      : formatCurrency(summary.expense)}
+                  </div>
+                </CardContent>
+              </Card>
             </div>
 
             {/* ── Tabela de lançamentos ─────────────────────── */}
