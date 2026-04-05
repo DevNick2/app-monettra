@@ -360,10 +360,12 @@ export default function LancamentosPage() {
   const {
     transactions,
     planningTransactions,
+    summary: apiSummary,
     isLoading,
     isLoadingPlanning,
     fetchTransactions,
     fetchPlanningTransactions,
+    fetchSummary,
     createTransaction,
     createBatchTransaction,
     payTransaction,
@@ -420,7 +422,8 @@ export default function LancamentosPage() {
   // ─── Inicialização ─────────────────────────────────────────
   useEffect(() => {
     fetchTransactions(currentMonth + 1, currentYear)
-  }, [fetchTransactions, currentMonth, currentYear])
+    fetchSummary(currentMonth + 1, currentYear)
+  }, [fetchTransactions, fetchSummary, currentMonth, currentYear])
 
   useEffect(() => {
     if (viewMode === "year") {
@@ -1003,7 +1006,16 @@ export default function LancamentosPage() {
                       id="date"
                       type="date"
                       value={newDate}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewDate(e.target.value)}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                        const val = e.target.value
+                        setNewDate(val)
+                        if (val) {
+                          const today = new Date()
+                          today.setHours(0, 0, 0, 0)
+                          const picked = new Date(val + "T00:00:00")
+                          setNewIsPaid(picked <= today)
+                        }
+                      }}
                       required
                     />
                   </div>
@@ -1238,39 +1250,108 @@ export default function LancamentosPage() {
             </div>
 
             {/* Resumos */}
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-              <Card className="border-border bg-card">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
-                    Saldo Total
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className={cn("text-2xl font-bold", summary.balance >= 0 ? "text-foreground" : "text-destructive")}>
-                    {formatCurrency(summary.balance)}
-                  </div>
-                </CardContent>
-              </Card>
-              <Card className="border-border bg-card">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
-                    Receitas
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-success">{formatCurrency(summary.income)}</div>
-                </CardContent>
-              </Card>
-              <Card className="border-border bg-card">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
-                    Despesas
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-destructive">{formatCurrency(summary.expense)}</div>
-                </CardContent>
-              </Card>
+            <div className="flex flex-col gap-3">
+              {/* Linha 1 — saldos gerais (todas as transações) */}
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                <Card className="border-border bg-card">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
+                      Saldo Geral
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className={cn(
+                      "text-2xl font-bold",
+                      (apiSummary?.net_balance ?? summary.balance * 100) >= 0
+                        ? "text-foreground"
+                        : "text-destructive"
+                    )}>
+                      {apiSummary
+                        ? formatCurrency(apiSummary.net_balance / 100)
+                        : formatCurrency(summary.balance)}
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card className="border-border bg-card">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
+                      Receitas
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold text-success">
+                      {apiSummary
+                        ? formatCurrency(apiSummary.total_income / 100)
+                        : formatCurrency(summary.income)}
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card className="border-border bg-card">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
+                      Despesas
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold text-destructive">
+                      {apiSummary
+                        ? formatCurrency(apiSummary.total_expense / 100)
+                        : formatCurrency(summary.expense)}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Linha 2 — saldos pagos (is_paid = true) */}
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                <Card className="border-border bg-card/60">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70">
+                      Saldo Pago
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className={cn(
+                      "text-lg font-semibold",
+                      (apiSummary?.paid_net_balance ?? 0) >= 0
+                        ? "text-foreground/80"
+                        : "text-destructive/80"
+                    )}>
+                      {apiSummary
+                        ? formatCurrency(apiSummary.paid_net_balance / 100)
+                        : "—"}
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card className="border-border bg-card/60">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70">
+                      Recebidas
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-lg font-semibold text-success/80">
+                      {apiSummary
+                        ? formatCurrency(apiSummary.paid_income / 100)
+                        : "—"}
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card className="border-border bg-card/60">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70">
+                      Pagas
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-lg font-semibold text-destructive/80">
+                      {apiSummary
+                        ? formatCurrency(apiSummary.paid_expense / 100)
+                        : "—"}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
             </div>
 
             {/* ── Tabela de lançamentos ─────────────────────── */}

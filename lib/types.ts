@@ -95,6 +95,16 @@ export interface BatchCreateTransactionPayload {
 
 export type RecurrenceScope = "single" | "forward" | "all"
 
+/** Agregação retornada por GET /transactions/summary */
+export interface TransactionSummary {
+  total_income: number
+  total_expense: number
+  net_balance: number
+  paid_income: number
+  paid_expense: number
+  paid_net_balance: number
+}
+
 export interface UpdateTransactionPayload {
   title?: string
   amount?: string

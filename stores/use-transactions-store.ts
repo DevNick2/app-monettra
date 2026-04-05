@@ -11,13 +11,16 @@ import type {
   BatchCreateTransactionPayload,
   UpdateTransactionPayload,
   RecurrenceScope,
+  TransactionSummary,
 } from "@/lib/types"
 
 interface TransactionsState {
   transactions: Transaction[]
   planningTransactions: Transaction[]
+  summary: TransactionSummary | null
   isLoading: boolean
   isLoadingPlanning: boolean
+  isLoadingSummary: boolean
   error: string | null
   activeMonth: number | null
   activeYear: number | null
@@ -26,6 +29,7 @@ interface TransactionsState {
 interface TransactionsActions {
   fetchTransactions: (month?: number, year?: number) => Promise<void>
   fetchPlanningTransactions: (year: number) => Promise<void>
+  fetchSummary: (month?: number, year?: number) => Promise<void>
   createTransaction: (data: CreateTransactionPayload) => Promise<void>
   createBatchTransaction: (data: BatchCreateTransactionPayload) => Promise<void>
   payTransaction: (code: string) => Promise<void>
@@ -39,8 +43,10 @@ type TransactionsStore = TransactionsState & TransactionsActions
 export const useTransactionsStore = create<TransactionsStore>((set, get) => ({
   transactions: [],
   planningTransactions: [],
+  summary: null,
   isLoading: false,
   isLoadingPlanning: false,
+  isLoadingSummary: false,
   error: null,
   activeMonth: null,
   activeYear: null,
@@ -63,6 +69,27 @@ export const useTransactionsStore = create<TransactionsStore>((set, get) => ({
           ? String((err as { message: string }).message)
           : "Erro ao carregar lançamentos"
       set({ isLoading: false, error: message })
+    }
+  },
+
+  // ── Fetch Summary ──────────────────────────────────────────
+  fetchSummary: async (month?: number, year?: number) => {
+    const params: Record<string, number> = {}
+    const m = month ?? get().activeMonth
+    const y = year ?? get().activeYear
+    if (m !== null && m !== undefined) params.month = m
+    if (y !== null && y !== undefined) params.year = y
+
+    set({ isLoadingSummary: true, error: null })
+    try {
+      const { data } = await api.get<TransactionSummary>("/transactions/summary", { params })
+      set({ summary: data, isLoadingSummary: false })
+    } catch (err: unknown) {
+      const message =
+        err && typeof err === "object" && "message" in err
+          ? String((err as { message: string }).message)
+          : "Erro ao carregar resumo"
+      set({ isLoadingSummary: false, error: message })
     }
   },
 
@@ -92,6 +119,7 @@ export const useTransactionsStore = create<TransactionsStore>((set, get) => ({
     try {
       await api.post("/transactions/", data)
       await get().fetchTransactions()
+      await get().fetchSummary()
     } catch (err: unknown) {
       const message =
         err && typeof err === "object" && "message" in err
@@ -108,6 +136,7 @@ export const useTransactionsStore = create<TransactionsStore>((set, get) => ({
     try {
       await api.post("/transactions/batch", data)
       await get().fetchTransactions()
+      await get().fetchSummary()
     } catch (err: unknown) {
       const message =
         err && typeof err === "object" && "message" in err
@@ -126,6 +155,7 @@ export const useTransactionsStore = create<TransactionsStore>((set, get) => ({
       set((state) => ({
         transactions: state.transactions.map((t) => (t.code === code ? data : t)),
       }))
+      await get().fetchSummary()
     } catch (err: unknown) {
       const message =
         err && typeof err === "object" && "message" in err
@@ -142,6 +172,7 @@ export const useTransactionsStore = create<TransactionsStore>((set, get) => ({
     try {
       await api.put(`/transactions/${code}`, data)
       await get().fetchTransactions()
+      await get().fetchSummary()
     } catch (err: unknown) {
       const message =
         err && typeof err === "object" && "message" in err
@@ -158,6 +189,7 @@ export const useTransactionsStore = create<TransactionsStore>((set, get) => ({
     try {
       await api.delete(`/transactions/${code}`, { params: { scope } })
       await get().fetchTransactions()
+      await get().fetchSummary()
     } catch (err: unknown) {
       const message =
         err && typeof err === "object" && "message" in err
