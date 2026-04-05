@@ -2,15 +2,7 @@ import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
 
 // Rotas públicas — não exigem autenticação
-const publicRoutes = [
-  "/login",
-  "/recuperar-conta",
-  "/sobre",
-  "/contato",
-  "/conheca",
-  "/precos",
-  "/compra",
-]
+const publicRoutes = ["/login", "/recuperar-conta"]
 
 function isPublicRoute(pathname: string): boolean {
   return publicRoutes.some((route) => {
