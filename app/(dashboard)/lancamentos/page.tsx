@@ -918,24 +918,15 @@ export default function LancamentosPage() {
                   </div>
                 </div>
 
-                {/* Bloco Cartão de Crédito (apenas na criação, tipo despesa) */}
+                {/* Bloco Crédito — compra na fatura do cartão (apenas na criação, tipo despesa) */}
                 {!editingTransaction && newType === "expense" && (
                   <div className="flex flex-col gap-2">
                     <label
-                      className={`flex items-center gap-3 rounded-lg border px-3 py-2.5 cursor-pointer transition-colors ${
-                        useCreditCard
-                          ? "border-primary/50 bg-primary/5"
-                          : "border-border bg-secondary/20 hover:bg-secondary/30"
-                      }`}
+                      className="flex items-center gap-3 rounded-lg border border-border bg-secondary/20 px-3 py-2.5 cursor-pointer hover:bg-secondary/30 transition-colors"
                       htmlFor="credit-card-switch"
                     >
                       <CreditCard className="h-4 w-4 text-muted-foreground shrink-0" />
-                      <div className="flex flex-1 flex-col gap-0.5">
-                        <span className="text-sm font-semibold text-foreground">Cartão de Crédito</span>
-                        <span className="text-xs text-muted-foreground">
-                          Aloca a compra na fatura do cartão
-                        </span>
-                      </div>
+                      <span className="flex-1 text-sm font-semibold text-foreground">Crédito</span>
                       <Switch
                         id="credit-card-switch"
                         checked={useCreditCard}
@@ -1158,8 +1149,8 @@ export default function LancamentosPage() {
                   </div>
                 )}
 
-                {/* Recorrência Fixa (apenas na criação) */}
-                {!editingTransaction && (
+                {/* Recorrência Fixa (apenas na criação; não disponível quando Crédito ativo — use parcelamento) */}
+                {!editingTransaction && !useCreditCard && (
                   <label
                     className="flex items-center gap-3 rounded-lg border border-border bg-secondary/20 px-3 py-2.5 cursor-pointer hover:bg-secondary/30 transition-colors"
                     htmlFor="recurrence-switch"

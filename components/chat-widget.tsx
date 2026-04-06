@@ -19,6 +19,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
+import { MarkdownText } from "@/components/common/markdown-text"
 import type { ChatMessage, ChatUIBlock } from "@/lib/types"
 import { cn } from "@/lib/utils"
 import { useChatStore } from "@/stores/use-chat-store"
@@ -360,14 +361,7 @@ function ChatMessageBubble({ message }: { message: ChatMessage }) {
     return (
       <div className="animate-in fade-in-0 slide-in-from-bottom-1 flex items-center gap-2 rounded-xl border border-border/70 bg-secondary/30 px-3 py-2">
         <Clock3 className="h-3.5 w-3.5 shrink-0 text-primary" />
-        <div className="min-w-0">
-          <p className="text-xs font-medium text-foreground">{message.content}</p>
-          {message.tool_name && (
-            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
-              {message.tool_name}
-            </p>
-          )}
-        </div>
+        <p className="text-xs font-medium text-foreground">{message.content}</p>
       </div>
     )
   }
@@ -397,6 +391,8 @@ function ChatMessageBubble({ message }: { message: ChatMessage }) {
             <div className="h-1.5 w-1.5 animate-bounce rounded-full bg-primary/60 [animation-delay:150ms]" />
             <div className="h-1.5 w-1.5 animate-bounce rounded-full bg-primary/60 [animation-delay:300ms]" />
           </div>
+        ) : message.role === "assistant" ? (
+          <MarkdownText content={message.content} />
         ) : (
           <div className="whitespace-pre-wrap break-words">{message.content}</div>
         )}

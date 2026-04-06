@@ -71,7 +71,7 @@ function formatCurrencyBR(val: string | number): string {
 
 function InvoicePanel({ card }: { card: CreditCardType }) {
   const { invoices, isLoadingInvoices, fetchInvoices, payInvoice } = useCreditCardsStore()
-  const [expanded, setExpanded] = useState<string | null>(null)
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [paying, setPaying] = useState<string | null>(null)
 
   useEffect(() => {
@@ -118,17 +118,21 @@ function InvoicePanel({ card }: { card: CreditCardType }) {
           {/* Header da fatura */}
           <div
             className="flex cursor-pointer items-center justify-between px-4 py-3 hover:bg-secondary/40 transition-colors"
-            onClick={() => setExpanded(expanded === inv.code ? null : inv.code)}
+            onClick={() => setExpanded(prev => {
+              const next = new Set(prev)
+              next.has(inv.code) ? next.delete(inv.code) : next.add(inv.code)
+              return next
+            })}
           >
             <div className="flex items-center gap-3">
               <button className="text-muted-foreground">
-                {expanded === inv.code ? (
+                {expanded.has(inv.code) ? (
                   <ChevronDown className="h-4 w-4" />
                 ) : (
                   <ChevronRight className="h-4 w-4" />
                 )}
               </button>
-              <span className="font-medium text-sm text-foreground">
+              <span className="font-medium text-base text-foreground">
                 Fatura {MONTH_NAMES[inv.reference_month - 1]}/{inv.reference_year}
               </span>
               {inv.is_paid ? (
@@ -142,7 +146,7 @@ function InvoicePanel({ card }: { card: CreditCardType }) {
               )}
             </div>
             <div className="flex items-center gap-3">
-              <span className="font-mono text-sm font-semibold text-destructive">
+              <span className="font-mono text-base font-semibold text-destructive">
                 {inv.total_amount}
               </span>
               {!inv.is_paid && (
@@ -167,14 +171,14 @@ function InvoicePanel({ card }: { card: CreditCardType }) {
           </div>
 
           {/* Transações expandidas */}
-          {expanded === inv.code && (
+          {expanded.has(inv.code) && (
             <div className="border-t border-border bg-background/50">
               {inv.transactions.length === 0 ? (
                 <p className="px-4 py-3 text-xs text-muted-foreground">
                   Nenhuma compra nesta fatura.
                 </p>
               ) : (
-                <table className="w-full text-xs">
+                <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border/50 text-muted-foreground">
                       <th className="px-4 py-2 text-left font-normal">Compra</th>
@@ -374,7 +378,7 @@ export default function CartoesPage() {
                       <CardTitle className="font-heading text-base text-foreground">
                         {card.name}
                       </CardTitle>
-                      <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground">
+                      <div className="mt-1 flex items-center gap-3 text-sm text-muted-foreground">
                         <span className="flex items-center gap-1">
                           <Wallet className="h-3 w-3" />
                           Limite: <span className="font-medium text-foreground ml-1">
