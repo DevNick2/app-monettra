@@ -190,7 +190,7 @@ export interface PlanningHorizonResponse {
 
 // Assinaturas (Subscriptions)
 
-export type RecurrenceType = "monthly" | "yearly" | "biannual" | "quarterly" | "semiannual"
+export type RecurrenceType = "monthly" | "yearly"
 
 export interface Subscription {
   code: string

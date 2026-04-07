@@ -23,6 +23,7 @@ interface SubscriptionsActions {
   toggleSubscription: (code: string) => Promise<void>
   updateSubscription: (code: string, data: UpdateSubscriptionPayload) => Promise<void>
   deleteSubscription: (code: string) => Promise<void>
+  renewSubscription: (code: string) => Promise<void>
   clearError: () => void
 }
 
@@ -94,6 +95,24 @@ export const useSubscriptionsStore = create<SubscriptionsStore>((set, get) => ({
           ? String((err as { message: string }).message)
           : "Erro ao atualizar assinatura"
       set({ isLoading: false, error: message })
+      throw err
+    }
+  },
+
+  // ── Renew ─────────────────────────────────────────────────
+  renewSubscription: async (code: string) => {
+    set({ error: null })
+    try {
+      const { data } = await api.patch<Subscription>(`/subscriptions/${code}/renew`)
+      set((state) => ({
+        subscriptions: state.subscriptions.map((s) => (s.code === code ? data : s)),
+      }))
+    } catch (err: unknown) {
+      const message =
+        err && typeof err === "object" && "message" in err
+          ? String((err as { message: string }).message)
+          : "Erro ao renovar assinatura"
+      set({ error: message })
       throw err
     }
   },

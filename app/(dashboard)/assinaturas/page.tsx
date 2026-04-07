@@ -77,9 +77,6 @@ import type {
 const recurrenceLabels: Record<RecurrenceType, string> = {
   monthly: "Mensal",
   yearly: "Anual",
-  biannual: "Bianual",
-  quarterly: "Trimestral",
-  semiannual: "Semestral",
 }
 
 // Ícones disponíveis para seleção — serviços conhecidos + genéricos
@@ -182,12 +179,14 @@ export default function AssinaturasPage() {
     toggleSubscription,
     updateSubscription,
     deleteSubscription,
+    renewSubscription,
   } = useSubscriptionsStore()
 
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingSubscription, setEditingSubscription] = useState<Subscription | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const [isSavingAndNew, setIsSavingAndNew] = useState(false)
+  const [renewingCode, setRenewingCode] = useState<string | null>(null)
 
   // ─── Form states ──────────────────────────────────────────────
   const [provider, setProvider] = useState("")
@@ -213,9 +212,6 @@ export default function AssinaturasPage() {
       switch (s.recurrence) {
         case "monthly": monthlyTotal += val; break
         case "yearly": monthlyTotal += val / 12; break
-        case "biannual": monthlyTotal += val / 24; break
-        case "quarterly": monthlyTotal += val / 3; break
-        case "semiannual": monthlyTotal += val / 6; break
       }
     })
     const activeCount = subscriptions.filter((s) => s.is_active).length
@@ -328,6 +324,18 @@ export default function AssinaturasPage() {
       toast.success("Assinatura removida.")
     } catch {
       toast.error("Erro ao remover assinatura.")
+    }
+  }
+
+  async function handleRenew(code: string) {
+    setRenewingCode(code)
+    try {
+      await renewSubscription(code)
+      toast.success("Assinatura renovada!")
+    } catch {
+      toast.error("Erro ao renovar assinatura.")
+    } finally {
+      setRenewingCode(null)
     }
   }
 
@@ -727,9 +735,38 @@ export default function AssinaturasPage() {
                           </Tooltip>
                         </td>
 
-                        {/* Ações: editar + remover */}
+                        {/* Ações: renovar + editar + remover */}
                         <td className="px-2 py-4 text-center">
                           <div className="flex items-center gap-1">
+                            {s.is_active && s.billing_date && (() => {
+                              const bd = parseBrDate(s.billing_date)
+                              const today = new Date()
+                              today.setHours(0, 0, 0, 0)
+                              return bd && bd <= today
+                            })() && (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => handleRenew(s.code)}
+                                    disabled={renewingCode === s.code}
+                                    className="h-7 w-7 cursor-pointer text-primary hover:text-primary hover:bg-primary/10"
+                                    aria-label="Renovar assinatura"
+                                  >
+                                    {renewingCode === s.code ? (
+                                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                    ) : (
+                                      <RefreshCw className="h-3.5 w-3.5" />
+                                    )}
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent side="left">
+                                  <p className="text-xs">Renovar assinatura</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            )}
+
                             <Button
                               variant="ghost"
                               size="icon"
